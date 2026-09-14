@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agrirobot:interface:v0:observation_frame",
+  "title": "Observation frame (interface v0, DRAFT)",
+  "description": "One record per image frame, handed by the robot or any stand-in for it (emulator, handheld camera, cart) to the disease system. Minimal contract of H8 section 4 piece 1 / H6 E12; the full O&M/SensorThings model of G4 section 2.3 comes later. Status: W1 draft, not yet reviewed with the robotics side.",
+  "type": "object",
+  "required": ["contract_version", "frame", "metadata"],
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "description": "Contract version this record follows.",
+      "const": "v0"
+    },
+    "frame": {
+      "description": "The image. Same object as 'frame' in the model-service request (H8 section 6.2).",
+      "type": "object",
+      "required": ["frame_id", "uri", "sha256", "width", "height"],
+      "additionalProperties": false,
+      "properties": {
+        "frame_id": {
+          "description": "Identifier of this image frame. Not a coordinate frame (that is metadata.pose.frame_id).",
+          "$ref": "#/$defs/id"
+        },
+        "uri": {
+          "description": "Where the image bytes are: mcap://<bag>/<topic>/<seq> or a file path (H8 section 6.2). Exact forms are fixed with piece 2 (MCAP replay, W3).",
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "description": "SHA-256 of the image bytes exactly as stored at uri (the encoded image file, or the MCAP message data), lowercase hex.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "width": {
+          "description": "Image width, pixels.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "description": "Image height, pixels.",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "metadata": {
+      "description": "Where, when and how the frame was taken. All fields are mandatory; a nullable field must still be present, with null.",
+      "type": "object",
+      "required": [
+        "site_id",
+        "plot_id",
+        "zone_id",
+        "timestamp_utc",
+        "pose",
+        "platform",
+        "camera",
+        "illumination_mode",
+        "sowing_batch",
+        "bbch"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "site_id": {
+          "description": "Site: farm, ZUT field, lab, or a virtual site built from an open dataset (e.g. MAK-Luwero).",
+          "$ref": "#/$defs/id"
+        },
+        "plot_id": {
+          "description": "Plot within the site.",
+          "$ref": "#/$defs/id"
+        },
+        "zone_id": {
+          "description": "Zone within the site layout (G4 section 3.3: full-sun control, inter-row, under-panel). Reserved value: 'open' (no panel).",
+          "$ref": "#/$defs/id"
+        },
+        "timestamp_utc": {
+          "description": "Acquisition (exposure) time of the frame, not ingest time. RFC 3339 in UTC with 'Z', up to nanoseconds.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+        },
+        "pose": {
+          "description": "Pose of the camera at exposure. Metres and radians (ROS REP 103).",
+          "type": "object",
+          "required": ["x", "y", "z", "yaw", "frame_id", "source"],
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "description": "Metres, in frame_id.",
+              "type": "number"
+            },
+            "y": {
+              "description": "Metres, in frame_id.",
+              "type": "number"
+            },
+            "z": {
+              "description": "Metres, in frame_id.",
+              "type": "number"
+            },
+            "yaw": {
+              "description": "Heading, radians, counter-clockwise about z from the x axis of frame_id, in [-pi, pi].",
+              "type": "number",
+              "minimum": -3.141592653589793,
+              "maximum": 3.141592653589793
+            },
+            "frame_id": {
+              "description": "Coordinate frame the pose is expressed in (ROS TF frame name), e.g. 'plot'.",
+              "$ref": "#/$defs/id"
+            },
+            "source": {
+              "description": "How the pose was obtained.",
+              "enum": ["rtk", "marker", "odometry", "manual", "synthetic"]
+            }
+          }
+        },
+        "platform": {
+          "description": "What carried the camera.",
+          "enum": ["emulator", "handheld", "cart", "robot"]
+        },
+        "camera": {
+          "description": "Camera state for this frame.",
+          "type": "object",
+          "required": ["model", "exposure_us", "gain", "flash", "white_balance"],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "description": "Camera model; for open datasets, the capture device as far as known.",
+              "type": "string",
+              "minLength": 1
+            },
+            "exposure_us": {
+              "description": "Exposure time, microseconds; null when the source does not record it.",
+              "type": ["number", "null"],
+              "exclusiveMinimum": 0
+            },
+            "gain": {
+              "description": "Sensor gain; null when not recorded. Unit not fixed in v0 (open question).",
+              "type": ["number", "null"],
+              "minimum": 0
+            },
+            "flash": {
+              "description": "Whether the flash fired for this frame.",
+              "type": "boolean"
+            },
+            "white_balance": {
+              "description": "White-balance mode or setting as reported by the camera, e.g. 'auto'.",
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "illumination_mode": {
+          "description": "Illumination mode of the acquisition.",
+          "enum": ["flash", "ambient"]
+        },
+        "sowing_batch": {
+          "description": "Sowing batch of the plot. Reserved value: 'unknown' (e.g. open datasets).",
+          "$ref": "#/$defs/id"
+        },
+        "bbch": {
+          "description": "BBCH growth stage of the plot, 0-99; null only together with bbch_null_reason.",
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 99
+        },
+        "bbch_null_reason": {
+          "description": "Why bbch is null; required when bbch is null, not allowed otherwise. not_recorded: nobody assessed it; not_applicable: no crop stage applies (e.g. colour target, bare soil); unknown: assessed but could not be determined.",
+          "enum": ["not_recorded", "not_applicable", "unknown"]
+        }
+      },
+      "if": {
+        "properties": {
+          "bbch": {"type": "null"}
+        },
+        "required": ["bbch"]
+      },
+      "then": {
+        "required": ["bbch_null_reason"]
+      },
+      "else": {
+        "properties": {
+          "bbch_null_reason": false
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "description": "Identifier: letters, digits, '_', '.', '-'; starts with a letter or digit; at most 128 characters; no spaces, slashes or colons.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    }
+  },
+  "examples": [
+    {
+      "contract_version": "v0",
+      "frame": {
+        "frame_id": "mak-luwero-000412",
+        "uri": "open_sets/makerere/IMG_0412.jpg",
+        "sha256": "50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c",
+        "width": 4096,
+        "height": 3000
+      },
+      "metadata": {
+        "site_id": "MAK-Luwero",
+        "plot_id": "P07",
+        "zone_id": "open",
+        "timestamp_utc": "2021-04-22T09:14:03Z",
+        "pose": {
+          "x": 1.2,
+          "y": 0.4,
+          "z": 0.6,
+          "yaw": 1.588,
+          "frame_id": "plot",
+          "source": "synthetic"
+        },
+        "platform": "emulator",
+        "camera": {
+          "model": "Samsung-M13",
+          "exposure_us": null,
+          "gain": null,
+          "flash": false,
+          "white_balance": "auto"
+        },
+        "illumination_mode": "ambient",
+        "sowing_batch": "unknown",
+        "bbch": null,
+        "bbch_null_reason": "not_recorded"
+      }
+    }
+  ]
+}

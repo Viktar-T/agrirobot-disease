@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agrirobot:interface:v0:waypoint_request",
+  "title": "Waypoint request (interface v0, STUB, DRAFT)",
+  "description": "Return channel, disease system -> robot: ask the robot to visit a plot, e.g. a plot in state 'verify' on the weekly map. Stub (H8 section 4 piece 1): only the envelope is specified and the target is the plot (no pose-level target in v0); the payload is agreed with the robotics side later, so extra fields are allowed.",
+  "type": "object",
+  "required": ["contract_version", "request_id", "timestamp_utc", "site_id", "plot_id", "reason"],
+  "additionalProperties": true,
+  "properties": {
+    "contract_version": {
+      "description": "Contract version this record follows.",
+      "const": "v0"
+    },
+    "request_id": {
+      "description": "Unique id of this request (UUID).",
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "timestamp_utc": {
+      "description": "Time the request was issued. RFC 3339 in UTC with 'Z'.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    },
+    "site_id": {
+      "description": "Target site.",
+      "$ref": "#/$defs/id"
+    },
+    "plot_id": {
+      "description": "Target plot.",
+      "$ref": "#/$defs/id"
+    },
+    "reason": {
+      "description": "Why the visit is requested; free text in v0.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "id": {
+      "description": "Identifier: same rule as in observation_frame.schema.json.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+    }
+  },
+  "examples": [
+    {
+      "contract_version": "v0",
+      "request_id": "7c1d9e2a-3b4f-4a6d-8e0c-2f5b9a1d6e37",
+      "timestamp_utc": "2026-11-24T10:05:00Z",
+      "site_id": "MAK-Luwero",
+      "plot_id": "P07",
+      "reason": "plot state: verify"
+    }
+  ]
+}

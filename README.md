@@ -13,7 +13,7 @@ One directory per Demo 1 piece (H8 §4). Owner roles: **P** = platform/data, **M
 
 | Directory | H8 piece | Owner | Weeks | H6 row | State |
 |---|---|---|---|---|---|
-| `interface/` | 1 — interface v0 (minimal observation contract) | P + E | W1–W2, v0.1 in W10 | E12 | placeholder |
+| `interface/` | 1 — interface v0 (minimal observation contract) | P + E | W1–W2, v0.1 in W10 | E12 | schema v0 draft (`schema/v0/`) |
 | `emulator/` | 2 — robot emulator | E | W2–W4, W7–W8 | E13 | placeholder |
 | `store/` | 3 — ingest and observation store | P | W2–W5 | E14 | placeholder |
 | `model_service/` | 4 — model service v0 | M | W1–W6 | E15 | placeholder |
