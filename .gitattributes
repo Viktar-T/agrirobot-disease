@@ -1,0 +1,4 @@
+# Store and check out text files with LF line endings, on Windows too:
+# ROS 2 tooling runs on Linux, and text files that get hashed (mission files,
+# manifests) must have the same bytes on every machine.
+* text=auto eol=lf

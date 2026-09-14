@@ -1,0 +1,30 @@
+# --- Data and large artefacts: never in git ---
+# Local data root: everything under data/ except its README (DVC comes in W2, piece 3)
+/data/*
+!/data/README.md
+# ROS 2 bags
+*.mcap
+*.db3
+# Model weights
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+# MLflow local stores
+mlruns/
+mlartifacts/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+.ipynb_checkpoints/
+
+# --- ROS 2 colcon outputs ---
+/build/
+/install/
+/log/
+
+# --- Local secrets (e.g. Hugging Face token for the gated DINOv3 weights, database passwords) ---
+.env
