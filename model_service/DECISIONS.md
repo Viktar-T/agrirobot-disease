@@ -110,3 +110,23 @@ a CUDA matmul on `sm_120` runs. First compute-log row written:
     - **Fallback** to `>=4.56,<5` only before the first real cache (Monday of W2), and only
       if either backbone will not load or run as S4.2 needs under 5.x, or the golden test
       cannot be made stable.
+
+## 2026-09-18 — W1 · DINOv3 terms (accepted)
+
+13. **DINOv3 licence accepted for research evaluation.** Request "DINOv3 — Gating Group
+    Collection" on Hugging Face, submitted and accepted 2026-09-18 on the ML role's own account
+    `Viktar-Taustyka`; one acceptance covers the collection (vitl16 and, if used, vitb16).
+    Licence: "DINOv3 License" (Meta, 14 Aug 2025) — custom, not OSI; gated weights. Token
+    `DINOv3-for-agrirobot-disease`, fine-grained, read-only ("read repository contents", "read
+    contents of gated repos"), stored as `HF_TOKEN` in `.env` (git-ignored, untracked; see 10).
+    - Scope: challenger only (H8 §6.4; H9 §6). Research-only until licence sheet H6 C5 is signed
+      with 4TECH; nothing containing DINOv3 — weights, features, heads trained on them, golden
+      vectors — leaves the project's machines or enters git (see 12).
+    - The dev laptop counts as a project machine for that rule (closes the open point in 11):
+      the rule is ours (no distribution before C5), not Meta's; the licence permits use on any
+      machine and binds *distribution* (attribution + licence copy), which we are not doing.
+    - Article A1 acknowledges DINOv3 use if its numbers are reported (licence clause on
+      publications).
+    - Pinned Hub revisions (configs/backbones): dinov3_l16 `ea8dc2863c51be0a264bab82070e3e8836b02d51`, dinov2_l14_reg `e4c89a4e05589de9b3e188688a303d0f3c04d0f3`;
+      `hub-check` is the command that re-verifies access and prints the current shas.
+    Reversed by: a signed C5 (lifts research-only) or a licence change by Meta.
