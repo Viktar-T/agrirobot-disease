@@ -27,7 +27,7 @@ $py = @('uv', 'run', 'python')
 
 switch ($Target) {
     'help' {
-        Write-Host 'targets: env, compute-log, env-check, test, lint, fmt, download, manifests, cache, heads, eval, probe, serve, clean'
+        Write-Host 'targets: env, compute-log, env-check, hub-check, test, lint, fmt, download, manifests, cache, heads, eval, probe, serve, clean'
     }
     'env' {
         Invoke-Step @('uv', 'sync')
@@ -41,6 +41,7 @@ switch ($Target) {
     'env-check' {
         Invoke-Step ($py + @('-c', "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'cpu')"))
     }
+    'hub-check' { Invoke-Step ($py + @('-m', 'ms.backbones.check') + $ArgsRest) }
     'test' { Invoke-Step (@('uv', 'run', 'pytest') + $ArgsRest) }
     'lint' {
         Invoke-Step @('uv', 'run', 'ruff', 'check', '.')

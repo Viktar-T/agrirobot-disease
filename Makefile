@@ -15,7 +15,7 @@ RES ?= 224
 ARGS ?=
 
 .DEFAULT_GOAL := help
-.PHONY: help env env-check compute-log test lint fmt download manifests cache heads eval probe serve clean
+.PHONY: help env env-check hub-check compute-log test lint fmt download manifests cache heads eval probe serve clean
 
 help: ## list the targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-13s\033[0m %s\n", $$1, $$2}'
@@ -32,6 +32,9 @@ compute-log: ## append the environment row (N7) to model_service/results/compute
 
 env-check: ## print what torch sees (device, CUDA, VRAM)
 	$(PY) -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'cpu')"
+
+hub-check: ## Hugging Face access: account, gated + commit sha per backbone, DINOv3 load (.env)
+	$(PY) -m ms.backbones.check $(ARGS)
 
 test: ## pytest (model_service/tests)
 	$(UV) run pytest

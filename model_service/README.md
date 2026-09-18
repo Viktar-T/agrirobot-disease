@@ -19,6 +19,7 @@ make env          # uv sync + .env from .env.example + the environment row in th
 make test         # pytest (model_service/tests)
 make lint         # ruff
 make env-check    # what torch sees: version, CUDA, device
+make hub-check    # Hugging Face access: account, gated + current sha per backbone, DINOv3 load
 ```
 
 On the Windows dev box there is no `make`; `.\make.ps1 env`, `.\make.ps1 test`, … run the

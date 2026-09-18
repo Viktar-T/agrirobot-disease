@@ -1,0 +1,23 @@
+# DINOv3 ViT-L/16 (LVD-1689M) - the challenger (H8 6.4). DECISIONS 11-13.
+# Research-only until licence sheet H6 C5 is signed: no DINOv3 weights, features, heads
+# or golden vectors in git or off the project's machines (DECISIONS 12-13).
+# Loaded explicitly (DECISIONS 12): pinned Hub revision, dtype and attention set here, and
+# preprocessing done in torchvision from preprocess_string, not by AutoImageProcessor.
+# `make hub-check` re-verifies access and prints the current Hub sha.
+backbone_id: dinov3_l16
+hf_id: facebook/dinov3-vitl16-pretrain-lvd1689m
+revision: ea8dc2863c51be0a264bab82070e3e8836b02d51
+licence: "DINOv3 License (Meta, 2025-08-14), gated"
+gated: true
+research_only_until_c5: true
+patch_size: 16
+embed_dim: 1024
+resolutions: [224, 512]
+# one per resolution; part of the cache key (S4.2)
+preprocess_string:
+  224: resize_short=224;center_crop=224;norm=imagenet
+  512: resize_short=512;center_crop=512;norm=imagenet
+dtype: float16
+attn_implementation: sdpa
+batch_size: 32
+token_types: [cls, meanpatch]

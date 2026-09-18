@@ -1,0 +1,21 @@
+# DINOv2 ViT-L/14 with registers - the champion (H8 6.4). DECISIONS 11-13.
+# Loaded explicitly (DECISIONS 12): pinned Hub revision, dtype and attention set here, and
+# preprocessing done in torchvision from preprocess_string, not by AutoImageProcessor.
+# `make hub-check` re-verifies access and prints the current Hub sha.
+backbone_id: dinov2_l14_reg
+hf_id: facebook/dinov2-with-registers-large
+revision: e4c89a4e05589de9b3e188688a303d0f3c04d0f3
+licence: Apache-2.0
+gated: false
+research_only_until_c5: false
+patch_size: 14
+embed_dim: 1024
+resolutions: [224, 518]
+# one per resolution; part of the cache key (S4.2)
+preprocess_string:
+  224: resize_short=224;center_crop=224;norm=imagenet
+  518: resize_short=518;center_crop=518;norm=imagenet
+dtype: float16
+attn_implementation: sdpa
+batch_size: 32
+token_types: [cls, meanpatch]
