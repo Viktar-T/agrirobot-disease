@@ -1,0 +1,7 @@
+# Tanzania 2025 - Zenodo 15685315 (spec 001 FR-002 `tz155k`).
+dataset: tz155k
+title: A Labeled Dataset of Healthy and Diseased Common Beans from Tanzania
+source:
+  kind: zenodo
+  record: "15685315"
+expect_licence: CC-BY-4.0

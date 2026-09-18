@@ -13,7 +13,7 @@ dependencies = [
     # backbones and feature extraction (S4.2)
     "torch>=2.9",
     "torchvision>=0.24",
-    "transformers>=4.56",
+    "transformers>=5.17,<6",  # model_service/DECISIONS.md 12 (2026-09-18)
     # arrays, tables, cache/manifest IO (S4.1, S4.2, S4.5)
     "numpy>=2.1",
     "pandas>=2.2",

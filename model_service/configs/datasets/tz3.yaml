@@ -1,0 +1,10 @@
+# Tanzania 2025-11 - Zenodo 16751336, 47 GB (spec 001 FR-002 `tz3`, optional).
+dataset: tz3
+title: Common Bean Leaf Image Dataset (Healthy, Rust, Anthracnose)
+source:
+  kind: zenodo
+  record: "16751336"
+expect_licence: CC-BY-4.0
+hold: >-
+  Spec 001 Clarification 3: download in full only if it adds images not in tz155k/tz59k.
+  Test first with the smallest archive: --files RUST_6.zip (0.91 GB).

@@ -1,0 +1,9 @@
+# ACRE Crop-Weed Dataset - Zenodo 8102217 (spec 001 FR-002 `acre`, stretch: test-only, class `none`).
+dataset: acre
+title: The ACRE Crop-Weed Dataset
+source:
+  kind: zenodo
+  record: "8102217"
+expect_licence: CC-BY-4.0
+hold: >-
+  Stretch item (spec 001 Clarification 7): decide at the end of W2 whether to build it.

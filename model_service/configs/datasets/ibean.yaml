@@ -1,0 +1,17 @@
+# iBean - Makerere AI Lab, Uganda: healthy / angular leaf spot / bean rust (spec 001 FR-002 `ibean`).
+# Test-only in piece 4; angular leaf spot is a held-out unknown (`unknown_als`).
+dataset: ibean
+title: "iBean: bean leaf images (healthy, angular leaf spot, bean rust)"
+source:
+  kind: huggingface
+  repo: AI-Lab-Makerere/beans
+  revision: 27aa014ce09b193e1a6f58112d4a66e0eddb69c5
+  path: data
+files: [train.zip, validation.zip, test.zip]
+expect_licence: MIT
+attribution: "Makerere AI Lab (2020). iBean: bean leaf disease images (healthy, angular leaf spot, bean rust) [Data set]. MIT licence. https://github.com/AI-Lab-Makerere/ibean"
+notes: >-
+  The download links in the iBean README (storage.googleapis.com/ibeans/*.zip) return
+  HTTP 403 (checked 2026-09-18). These are the same three archives from the lab's own
+  Hugging Face repository, pinned to a commit. The README states 1,296 images; the
+  Hugging Face card states 1,034 + 133 + 128 = 1,295.

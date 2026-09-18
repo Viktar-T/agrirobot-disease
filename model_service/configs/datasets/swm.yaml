@@ -1,0 +1,15 @@
+# Sclerotinia and White Mold (SWM) - Mendeley Data jxvmr8rchx v1 (spec 001 FR-002 `swm`).
+# Held-out unknown `unknown_wm`: only the white-mould class; sclerotium and apothecium
+# are soil-borne life stages (decided in configs/class_map_v1.yaml).
+dataset: swm
+title: Sclerotinia and White Mold (SWM) dataset
+source:
+  kind: mendeley
+  id: jxvmr8rchx
+  version: 1
+files: [swm-dataset.zip, r-swm-dataset.zip]
+expect_licence: CC-BY-4.0
+notes: >-
+  swm-dataset.zip = SWM, 2,527 images of 300 x 300 px; r-swm-dataset.zip = R-SWM, 1,278
+  original images of variable size; YOLO and Pascal VOC annotations in both. Data article:
+  Data in Brief 68 (2026), doi:10.1016/j.dib.2026.113187.

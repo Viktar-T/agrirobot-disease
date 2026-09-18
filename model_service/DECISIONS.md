@@ -37,7 +37,7 @@ appended here as they are made.
    DINOv3); the current major is 5.x and it carries both `Dinov2WithRegistersModel` and
    `DINOv3ViTModel` (checked on install, 2026-09-17). If a 5.x API change bites during
    S4.2, pin `>=4.56,<5` and relock; the exact version ends up in every cache `meta.json`
-   either way.
+   either way. → Settled in 12 (2026-09-18).
 8. **Compute log (N7) — two extensions to the row of the work plan's §4.** `step = "env"`
    is allowed in addition to {extract, train_head, eval, serve}, because the first entry
    the plan asks for (GPU model / VRAM / driver) is not any of those four; and that row
@@ -61,5 +61,52 @@ appended here as they are made.
 GPU: **RTX 5060 Laptop, 7.96 GB, driver 592.15, CUDA 13.1, compute capability 12.0**;
 a CUDA matmul on `sm_120` runs. First compute-log row written:
 `model_service/results/compute_log.jsonl`. `make test` green (5 tests), `make lint` clean.
-Note the VRAM: 8 GB decides the extraction batch sizes at 518/512 in W3 and is the reason
-the high-res pass is a nightly job.
+8 GB of VRAM is not the binding constraint for extraction; time is (see 11).
+
+## 2026-09-18 — W1 · where extraction runs, and the transformers line (approved)
+
+11. **All feature extraction runs on the dev laptop: 224 in W2, 518/512 overnight in W3.**
+    Estimates for ViT-L without gradients, about 7 GB usable (the display holds about
+    0.6 GB): weights 0.6 GB in fp16; activations per image at 518 about 25 MB with SDPA
+    and about 120 MB with eager attention (DINOv3 at 512: about 20 / 70 MB); about
+    1.0 TFLOP per image at 518 (DINOv3 at 512: about 0.7), about 6× the 224 pass. Batch 32
+    at 518 fits even with eager attention, so memory does not limit inference. The open
+    question is time, and running unattended on a laptop (sleep, thermal throttling at
+    80 W). Rejected: a university GPU server (none arranged); high-res on a subset only
+    (kept as the fallback below).
+    - **Precision**: inference in fp16 autocast with SDPA, batch 32. Before the first real
+      cache, compare fp16 with fp32 once on the 30-image fixture (cosine similarity of the
+      CLS vectors); the measured gap sets the tolerance of the golden test in 12.
+    - **Cache key (S4.2)**: `compute_dtype` joins `(backbone_id, weights_sha256,
+      resolution, preprocess_string)`, because fp16 and fp32 features differ and the
+      plan's key would not see it. Batch size goes in `meta.json` only.
+    - **Resumable**: extraction writes shards and skips finished ones, so a laptop that
+      sleeps loses one shard rather than a night; one compute-log (N7) row per run.
+    - **Go/no-go, fixed before the number exists**: Monday of W2, time iBean (1,296
+      images) at 224 and at 518 and project the high-res pass for both backbones over all
+      manifests. More than three nights → high-res only on the evaluation manifests plus
+      a sample of the training data, recorded here. A server only if one becomes
+      available.
+    - **Before the DINOv3 weights are downloaded**: confirm that this laptop counts as a
+      university machine under the DINOv3 terms (H6 C5).
+12. **`transformers>=5.17,<6`** (lock: 5.17.0), and the library version kept out of the
+    features. No cache exists yet, so staying on 5.x costs nothing now; a later switch
+    would cost a GPU-night per backbone. Rejected: pinning `>=4.56,<5` (matches the plan
+    text, but it is the older line and a later move means re-extracting); leaving
+    `>=4.56` open (a relock could jump to 6.x silently).
+    - **Preprocessing** in torchvision from `preprocess_string`, not `AutoImageProcessor`,
+      so processor defaults cannot change the cache.
+    - **Explicit loading**: each `configs/backbones/*.yaml` sets dtype, attention
+      implementation and a pinned Hub `revision` (commit sha); defaults are what change
+      between majors, and the pin stops the Hub repo changing underneath.
+    - **Golden-feature test**: DINOv2 CLS at 224 on the fixture (30 × 1024 fp16, about
+      60 KB) committed to `tests/fixtures/`; tolerance from the fp16 check in 11; skipped
+      in CI (needs the weights) and run before any relock. A failure means a new cache
+      version, not silent drift. DINOv2 only: features derived from DINOv3 stay out of
+      git under its terms.
+    - **Cache key**: library versions stay out of it (every relock would otherwise
+      invalidate GPU-nights of caches); the golden test guards drift, and
+      `transformers_version` / `torch_version` stay in `meta.json` as planned.
+    - **Fallback** to `>=4.56,<5` only before the first real cache (Monday of W2), and only
+      if either backbone will not load or run as S4.2 needs under 5.x, or the golden test
+      cannot be made stable.

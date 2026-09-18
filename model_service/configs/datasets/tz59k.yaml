@@ -1,0 +1,7 @@
+# Tanzania 2023 - Zenodo 8286126 (spec 001 FR-002 `tz59k`).
+dataset: tz59k
+title: Common Beans Imagery Dataset for Early Detection of Crop Diseases
+source:
+  kind: zenodo
+  record: "8286126"
+expect_licence: CC-BY-4.0

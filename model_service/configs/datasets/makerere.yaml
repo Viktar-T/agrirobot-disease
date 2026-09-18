@@ -1,0 +1,13 @@
+# Makerere University Beans Image Dataset (Lacuna Fund), Uganda (spec 001 FR-002 `makerere`).
+# Per-image district / sub-county / date decide whether a blocked split is possible (H6 E4).
+dataset: makerere
+title: Makerere University Beans Image Dataset
+source:
+  kind: dataverse
+  server: https://dataverse.harvard.edu
+  doi: 10.7910/DVN/TCKVEW
+notes: >-
+  DataCite lists the record as version 2.1 under CC0-1.0 (2026-09-18); the datasheet says
+  CC BY. Spec 001 Clarification 1: confirm on the record's Terms tab. The Dataverse API
+  timed out from the dev box on 2026-09-18; if it still does, download by hand into
+  data/raw/makerere/ and run with --no-fetch.
