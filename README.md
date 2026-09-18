@@ -16,10 +16,21 @@ One directory per Demo 1 piece (H8 §4). Owner roles: **P** = platform/data, **M
 | `interface/` | 1 — interface v0 (minimal observation contract) | P + E | W1–W2, v0.1 in W10 | E12 | schema v0 draft (`schema/v0/`) |
 | `emulator/` | 2 — robot emulator | E | W2–W4, W7–W8 | E13 | placeholder |
 | `store/` | 3 — ingest and observation store | P | W2–W5 | E14 | placeholder |
-| `model_service/` | 4 — model service v0 | M | W1–W6 | E15 | placeholder |
+| `model_service/` | 4 — model service v0 | M | W1–W6 | E15 | environment + spec 001 draft |
 | `measurements/` | 5 — the measurements report | M (+P) | W4–W8 | F16 | placeholder |
 | `plot_map/` | 6 — weekly plot-state map v0 | P (+M) | W6–W9 | E16 | placeholder |
 | `data/` | local data root (open sets, caches, bags) | P | from W1 | — | git-ignored |
+
+## Environment
+
+One Python 3.11 environment for the repository (root `pyproject.toml` + `uv.lock`, package `ms` from `model_service/src/`), created with [uv](https://docs.astral.sh/uv/):
+
+```
+make env      # Linux/WSL      .\make.ps1 env    # the Windows dev box (no make there)
+make test
+```
+
+Secrets go in `.env` (git-ignored, copy of `.env.example`). The ROS 2 side of piece 2 builds separately with colcon on Linux/WSL.
 
 ## Conventions
 
