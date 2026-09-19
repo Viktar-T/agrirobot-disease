@@ -95,14 +95,27 @@ def _fmt(x: Any, digits: int = 3) -> str:
     return str(x)
 
 
+def _manifests(joined: str, split: str) -> str:
+    """'ibean_v1 (train)', or 'a_v1+b_v1 (train)' for a row over several manifests (N4)."""
+    return f"{'+'.join(Path(p).stem for p in joined.split('+'))} ({split})"
+
+
+def _metric(r: dict[str, Any]) -> str:
+    """The metric, and for N4 (a probe over k sites) its chance level 1/k."""
+    if r["number"] == "N4" and r.get("classes"):
+        return f"{r['metric']} (chance {1 / len(r['classes']):.3f})"
+    return r["metric"]
+
+
 def render(rows: list[dict[str, Any]]) -> str:
     """n_table.md: one section per number, one line per row, the split rule on every line."""
     out = [
         "# N-table",
         "",
-        "Rendered from `n_table.jsonl` by `python -m ms.eval.run` (`make eval`); do not edit.",
-        "Every number carries its split rule (D-9). A row marked *not quotable* only exercises",
-        "the pipeline (for example the W2 slice, trained on a test-only manifest).",
+        "Rendered from `n_table.jsonl` by `make eval` (`ms.eval.run`) and `make probe`",
+        "(`ms.eval.probe`); do not edit. Every number carries its split rule (D-9). A row",
+        "marked *not quotable* only exercises the pipeline (for example the W2 slice, trained",
+        "on a test-only manifest).",
     ]
     for number, title in NUMBERS.items():
         these = [r for r in rows if r["number"] == number]
@@ -117,8 +130,8 @@ def render(rows: list[dict[str, Any]]) -> str:
             "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         for r in these:
-            train = f"{Path(r['train_manifest']).stem} ({r['train_split']})"
-            test = f"{Path(r['test_manifest']).stem} ({r['test_split']})"
+            train = _manifests(r["train_manifest"], r["train_split"])
+            test = _manifests(r["test_manifest"], r["test_split"])
             ci = "—"
             if r["ci_low"] is not None:
                 ci = f"{_fmt(r['ci_low'])}–{_fmt(r['ci_high'])}"
@@ -126,7 +139,7 @@ def render(rows: list[dict[str, Any]]) -> str:
             out.append(
                 f"| {r['backbone_id']} | {r['res']} | {r['token_type']} | {r['head']} "
                 f"| {r['seed']} "
-                f"| {train} → {test} | {r['metric']} | {_fmt(r['value'])} | {ci} "
+                f"| {train} → {test} | {_metric(r)} | {_fmt(r['value'])} | {ci} "
                 f"| {_fmt(r['coverage'], 2)} | {r['n']} | `{r['split_rule']}` | {flag} |"
             )
     return "\n".join(out) + "\n"

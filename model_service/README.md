@@ -60,6 +60,20 @@ On Windows, `.\make.ps1 manifests -DS ibean`, `.\make.ps1 cache -BB dinov2_l14_r
 -DS ibean`, and so on. Every step is idempotent: run it again and it does nothing. Heads land
 in `data/heads/<run_id>/` (git-ignored).
 
+## The site probe (N4)
+
+How easily the cached CLS features give away where a picture was taken: which bean set, and
+within Makerere which district (DECISIONS 54). It needs the 224 caches of every backbone.
+
+```bash
+make probe        # every backbone config at 224, both targets -> N4 rows in results/, MLflow runs
+make probe ARGS="--backbone dinov2_l14_reg --target district"      # one of them
+uv run mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db     # experiment piece4-n4-site-probe
+```
+
+The MLflow store `mlruns/` is local and git-ignored until piece 3 runs the server;
+`MLFLOW_TRACKING_URI` points the code at a server instead (DECISIONS 55).
+
 ## The compute log (N7)
 
 `results/compute_log.jsonl` — one JSON line per unit of compute, written by code only

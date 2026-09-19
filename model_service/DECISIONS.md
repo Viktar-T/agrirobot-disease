@@ -562,3 +562,72 @@ The work plan's "Thu–Fri — caches at 224", run on the dev laptop's GPU after
       names its one version on disk, and no file, or two versions, gives `missing_file`
       (exit 2). A frozen manifest whose bytes changed now stops with
       `frozen_manifest_modified` (exit 2), not a traceback. `test_cache.py` covers the id.
+
+## 2026-09-19 — W2 · N4, the site-prediction probe (ahead of schedule)
+
+The work plan's "Fri — site-prediction probe (N4)", on the 224 caches of 52. `ms.eval.probe`
+(`make probe`) is new, with CPU tests on synthetic manifests and caches (`tests/test_probe.py`).
+
+54. **The probe's protocol, fixed before the first number.**
+    - There are two targets. `dataset` is iBean, Makerere or Tanzania (chance 1/3). It is
+      fitted on each manifest's train split and scored on its test split, so the scored rows
+      come from districts and dates the probe never saw (iBean's split is unblocked).
+      `district` is the district within Makerere (chance 1/12). It uses the 10,118 rows
+      whose XML records a district: rust and angular leaf spot, from every split. Healthy
+      rows record none (FR-013). The districts are the split's blocks, so the train split
+      holds none of the test's districts. This target is scored by 5-fold cross-validation
+      instead, grouped by `phash_group`, stratified by district, seed 0.
+    - Only the classes that every target has take part (for `dataset`: healthy and rust),
+      and every (target, class) cell weighs the same, in the fit and in the score.
+      Otherwise a set's class mix would pass for the set: Tanzania's rows are 92 % healthy,
+      and Ntungamo's 87 % angular leaf spot.
+    - The probe is multinomial logistic regression (lbfgs, C = 1) on the L2-normalised CLS,
+      standardised. Nothing is tuned, so no validation split is spent.
+    - The number is balanced accuracy: each target's recall averaged over its classes, then
+      over the targets. The interval is a bootstrap over the scored rows within their cells
+      (1,000 draws). It ignores that rows cluster by day and field, so it is narrower than
+      the uncertainty about sites. The probe has no seeds to vary.
+    - The N-table row has `metric = balanced_accuracy:<target>`, `head = logreg`, and a null
+      `model_version`. A row over several manifests joins their paths, and their hashes,
+      with `+` in both manifest fields. `split_rule` joins the scored rows' rules, or is
+      `unblocked:5fold_by_phash_group` for the district. `classes` lists the targets, and
+      `n_table.md` prints the chance level beside the metric. That gives one row per
+      (backbone, target): the plan's "one row per backbone", once per target.
+    - iBean's role is `test_only` (35), but the probe fits no disease model, so it may read
+      iBean's train split.
+55. **MLflow's local store is SQLite: `mlruns/mlflow.db`, with its artifacts in
+    `mlruns/artifacts/`** (git-ignored), until piece 3 runs the server. `MLFLOW_TRACKING_URI`
+    overrides it.
+    - MLflow 3.16 refuses the plain `mlruns/` file store that the plan names ("maintenance
+      mode"), unless `MLFLOW_ALLOW_FILE_STORE=true` forces it. Its default, `mlflow.db` in
+      the working directory, would leave one store in every folder a command runs in.
+    - N4 logs one run per probe in the experiment `piece4-n4-site-probe`. Each run has tags
+      (the probe_id of its N-table row, the backbone, the target, the cache key and
+      `research_only_until_c5`), the parameters, the metrics, and `probe.json` (the cells
+      and the confusion matrix). A store that holds DINOv3 runs stays on the project's
+      machines (13).
+56. **What N4 measured at 224.** The numbers are quotable; the rows are in
+    `results/n_table.jsonl` and the runs in MLflow.
+
+    | backbone | dataset (chance 0.333) | district (chance 0.083) |
+    |---|---|---|
+    | `dinov2_l14_reg` | 0.983 (0.980–0.986) | 0.767 (0.749–0.787) |
+    | `dinov3_l16` | 0.992 (0.990–0.994) | 0.770 (0.746–0.795) |
+
+    - Both backbones give the set away almost every time. No iBean row is mistaken, and
+      Tanzania's are mistaken 0.3–1 % of the time. Makerere is the hardest (recall 0.954 and
+      0.980). Its misses go mostly to iBean, the other Ugandan set, also from Makerere
+      University.
+    - The district can be read too: three times out of four, against one in twelve by
+      chance. The misses fall between districts visited on the same days. 40 % of Bugiri's
+      rows go to Mayuge (25–26 Apr; both record a "Budaya" sub-county), and 26–28 % of
+      Mbale's go to Pallisa (22 May; both record "Namunsi"), and some to Sironko. So what
+      the features carry is largely the capture session: day, field, light and phone.
+    - The fits converged in 18–89 lbfgs iterations and took 17–41 s each on the CPU.
+    - Reading: a head can find the site in the features. A blocked N1 can still reward site
+      cues that happen to go with a class, and Makerere's healthy rows, which all come from
+      April (44), are such a cue. N4 says what can be read from the features, not what a
+      head reads; N2 (W3) is the test of that.
+    - Between the backbones, DINOv3 gives the set away slightly more (the intervals do not
+      overlap), and the district is a tie. How N4 breaks a tie is for the verdict's rule
+      (H9 §7, W4), not for this entry.
