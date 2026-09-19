@@ -943,3 +943,41 @@ Every N1 aggregate now has its N2 pair (spec 005 US-4.1).
       up to 0.087 (linear, Makerere + iBean → Tanzania). The verdict is W4's, by its rules.
     - N1 is 0.988–0.996 and N2 is 0.35–0.89, so N1 ≫ N2. What that does and does not show
       is the guard-rail check's, the next task.
+
+## 2026-09-19 — W3 · the guard-rail check: N1 against N2
+
+The work plan's "Guard-rail check": if N1 ≫ N2 does not appear, look for leakage before
+anything else. It compares the quotable aggregates of 72 and 75: macro-F1, and rust recall for
+the crops.
+
+77. **N1 ≫ N2 appears for every backbone and head, so no leakage hunt was triggered.**
+
+    | backbone | head | N1 Makerere | N1 Tanzania | N2 T → M | N2 T → M rust crops (recall) | N2 T → iBean | N2 M + iBean → T |
+    |---|---|---|---|---|---|---|---|
+    | `dinov2_l14_reg` | linear | 0.990 | 0.994 | 0.362 | 0.475 | 0.545 | 0.889 |
+    | | proto | 0.993 | 0.996 | 0.365 | 0.417 | 0.525 | 0.727 |
+    | | mix | 0.994 | 0.995 | 0.363 | 0.435 | 0.527 | 0.861 |
+    | `dinov3_l16` | linear | 0.988 | 0.992 | 0.360 | 0.485 | 0.516 | 0.802 |
+    | | proto | 0.991 | 0.996 | 0.346 | 0.319 | 0.531 | 0.718 |
+    | | mix | 0.992 | 0.996 | 0.347 | 0.367 | 0.520 | 0.782 |
+
+    - Against the N1 of the set its heads trained on, each N2 direction loses macro-F1:
+      - Tanzania → Makerere: 0.63–0.65;
+      - Tanzania → iBean: 0.45–0.48;
+      - Makerere + iBean → Tanzania: 0.10–0.27, measured against Makerere's N1.
+    - The rust crops are recalled at 0.32–0.49, against 0.98–0.99 within the sets.
+    - For every head, every N1 interval lies above every N2 interval. The smallest gap is
+      DINOv2's linear head on Makerere + iBean → Tanzania: 0.990 against 0.889.
+78. **Two cheap checks, for the record.** The rule did not call for them, but an N1 near 0.99
+    is the kind of number H8's risks call "too good".
+    - Within each frozen manifest (Makerere, Tanzania, iBean and the Makerere crops), no
+      pHash group, block or image straddles train, val and test, and no parent's crops do.
+      This was recomputed from the rows; spec 001 already checks it at build.
+    - Across the sets, `overlap` finds no exact and no near duplicate (pHash within 2 bits)
+      for Tanzania and Makerere, Tanzania and iBean, Makerere and iBean, or Tanzania and the
+      Makerere crops. pHash at 2 bits finds re-encoded and resized copies, not new crops or
+      re-framings of a scene.
+    - So N1's height is not duplicates. It does include cues that belong to a set, which the
+      features carry (N4, 56), and on Makerere the class ↔ trip confound (73).
+    - The gap is the size of the shift between sets. N1 is the within-set ceiling, and N2 is
+      the number to read for a new farm.
