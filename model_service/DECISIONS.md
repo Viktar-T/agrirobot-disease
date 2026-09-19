@@ -1100,3 +1100,64 @@ new runs.
       DINOv3's linear gap there fell from 0.186 to 0.116.
     - The duplicate checks of 78 depend only on the frozen manifests, which have not changed,
       so they hold as they were.
+
+## 2026-09-19 — W3 · the 518/512 caches for both backbones (ahead of schedule)
+
+The work plan's "High-res caches", run on the dev laptop's GPU in one evening, one backbone
+after the other, while the heads and N1/N2 ran again on the CPU (80–82).
+
+83. **Every frozen manifest has a high-res cache for both backbones** (spec 002 SC-1): 518 for
+    DINOv2, 512 for DINOv3. The go/no-go of 11 came first: iBean at 518 ran at 17.5 images/s,
+    which projects about 2.5 h per backbone over the five manifests, far below the three
+    nights that would have cut the pass down to the evaluation manifests and a sample of the
+    training data. So the pass covers every frozen manifest, in fp16 autocast, batch 32,
+    shards of 1,024, as at 224 (52). There is one key per backbone: `dinov2_l14_reg` @ 518
+    `2f7e632db9fe0d1f`, `dinov3_l16` @ 512 `9f7ededb57be5fc9`.
+
+    | manifest | rows | DINOv2 @ 518 s | images/s | DINOv3 @ 512 s | images/s |
+    |---|---|---|---|---|---|
+    | `ibean_v1` | 1,295 | 79.4 | 16 | 76.3 | 17 |
+    | `swm_v1` | 684 | 52.3 | 13 | 45.5 | 15 |
+    | `makerere_crops_v1` | 27,019 | 1,529.9 | 18 | 1,292.3 | 21 |
+    | `makerere_v1` | 15,402 | 888.3 | 17 | 748.0 | 21 |
+    | `tanzania_v1` | 112,176 | 6,331.7 | 18 | 5,373.2 | 21 |
+    | all five | 156,576 | 8,882 (2 h 28 min) | 17.6 | 7,535 (2 h 6 min) | 20.8 |
+
+    - Each time includes loading the model and hashing its weights. The evening took 4 h
+      35 min in all, 18:13 to 22:48 local.
+    - Every cache loads against its manifest's frozen sha256; its `image_id` and `sha256` are
+      the manifest's, in row order; its features are finite, with no constant dimension. Each
+      image's CLS at 518/512 has a mean cosine of 0.87–0.95 with its own CLS at 224, against
+      0.54–0.85 for shuffled pairs, so no cache sits shifted against its manifest.
+    - Every extraction wrote one compute-log row (N7), and each cache's rows add up to its
+      `n_images`; no run had to resume (SC-3). A second `make cache` over all ten does nothing
+      and adds no row (SC-2).
+    - The `.npz` files hold 0.70 GB per backbone again, because what is stored does not depend
+      on the resolution; `data/cache/` is now 2.79 GB in 40 files. `dvc add data/cache`
+      updated `data/cache.dvc` (57). The DVC cache is still the local one, and DINOv3's
+      features stay on this machine (13).
+    - The sidecars name git `12ff477`, `37d6e64` and `45a01b7`, the three commits the other
+      work stream made during the evening. Nothing in the extraction path changed between
+      them: `ms/cache/`, `ms/data/manifests.py`, `ms/compute_log.py`, the backbone configs and
+      the lock file are all as `20bb896` left them.
+84. **Throughput at 518/512, and the rate to plan the next night run with.** Spec 002
+    Clarification 8 holds at high resolution too: shards of 1,024 and batches of 32 stay.
+    - The GPU is the limit on every manifest but SWM: full shards ran at 17.2–17.9 images/s
+      for DINOv2 and 18.6–21.3 for DINOv3, from the first shard to the last. SWM's 10 MP
+      originals are decode-bound again (13 and 15 images/s).
+    - Per image, 518 cost DINOv2 5.0× its 224 time (Tanzania: 17.7 against 89 images/s), and
+      512 cost DINOv3 4.3× (the crops: 20.9 against 90). 53 projected 6.2× and 5.8× from the
+      token counts, and 3–3.5 h per backbone from the lower rate that followed the power cap.
+    - The cap did not fall this time. In every half hour of the 4.6 h the GPU drew 76–79 W on
+      average at about 2.2 GHz and 78–80 °C (82 at most), with the software power cap as its
+      only active limit. In W2 it was held at 55–62 W and then about 40 W after 40 minutes
+      (53). What differed, the laptop's power mode for instance, was recorded neither then nor
+      now, so plan a night run at the slower rate and take the faster one as a bonus.
+    - A run uses 4.2 GB of the 8 GB of VRAM, the display's share included, and a full shard
+      takes 48–60 s, so a laptop that sleeps still loses under a minute.
+    - Running unattended, the open question of 11: one script ran the ten jobs in turn and held
+      a Windows `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` request for as
+      long as it ran. That blocks idle sleep without changing a power setting, and the request
+      ends with the process. The GPU log, sampled every 30 s, has no gap. It cannot stop a
+      closed lid from sleeping; on mains power this laptop's idle sleep is off anyway (45 min
+      on battery).

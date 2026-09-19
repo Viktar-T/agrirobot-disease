@@ -1,6 +1,6 @@
 # Feature specification: 002 — Feature cache
 
-**Branch**: `002-cache` · **Created**: 2026-09-19 · **Status**: Implemented 2026-09-19 (`ms.cache`, `ms.cache.extract`, the W2 slice); acceptance tests in `model_service/tests/test_cache.py` green, the golden test opt-in and green; SC-1 met at 224 on 2026-09-19 for both backbones and every frozen manifest (DECISIONS 52)
+**Branch**: `002-cache` · **Created**: 2026-09-19 · **Status**: Implemented 2026-09-19 (`ms.cache`, `ms.cache.extract`, the W2 slice); acceptance tests in `model_service/tests/test_cache.py` green, the golden test opt-in and green; SC-1 met on 2026-09-19 for both backbones and every frozen manifest, at 224 (DECISIONS 52) and at 518/512 (DECISIONS 83)
 **Input**: H8 §6.4 (backbones, features), `docs/piece4-work-plan.md` S4.2 and §4 (conventions), DECISIONS 11–13 (extraction on the dev laptop, fp16 + SDPA, the key, transformers 5.x, DINOv3 terms), the backbone configs (`configs/backbones/*.yaml`), spec 001 (manifests). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
 
 ## Why
@@ -142,7 +142,7 @@ Closed on 2026-09-19:
 5. **`sha256[N]`** is stored next to `image_id[N]`, for 006's cached-hash path.
 6. **Every split is extracted.** Evaluation needs test and held-out features too, so the spec 001 loader gains `purpose = extract`, which reads every split and uses no labels.
 7. **Golden tolerance (closed on 2026-09-19).** 2e-6. The fp16/fp32 comparison on the fixture gave a minimum CLS cosine of 0.999998924; the gap, 1.08e-6, is rounded up to one significant digit (DECISIONS 38).
-8. **Shard size and batch size (closed on 2026-09-19).** 1024 and 32 stay. At 224 a shard takes 11–15 s, and a run uses 2.5 GB of the 8 GB of VRAM. The GPU is the limit on small pictures (about 90 images/s for both backbones), and decoding on large ones (DECISIONS 53).
+8. **Shard size and batch size (closed on 2026-09-19).** 1024 and 32 stay. At 224 a shard takes 11–15 s, and a run uses 2.5 GB of the 8 GB of VRAM. The GPU is the limit on small pictures (about 90 images/s for both backbones), and decoding on large ones (DECISIONS 53). They hold at 518/512 as well: a shard takes 48–60 s, a run uses 4.2 GB, and only SWM stays decode-bound (DECISIONS 84).
 
 Open:
 

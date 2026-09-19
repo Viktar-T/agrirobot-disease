@@ -13,7 +13,7 @@ Piece 4 hands its two data artefacts to piece 3. Both are made by code and never
 | Folder | Pointer in git | Holds | Made by | Contract |
 |---|---|---|---|---|
 | `data/manifests/` | `data/manifests.dvc` (11 files, 174 MB) | one manifest per (id, version) with its sidecar, and `FROZEN.jsonl` | `make manifests DS=<id>`; crops: `python -m ms.data.manifests crops` | spec 001 |
-| `data/cache/` | `data/cache.dvc` (20 files, 1.40 GB) | frozen-backbone features per backbone, resolution, cache key and manifest | `make cache BB=<backbone> RES=<res> DS=<id>` | spec 002 |
+| `data/cache/` | `data/cache.dvc` (40 files, 2.79 GB) | frozen-backbone features per backbone, resolution, cache key and manifest | `make cache BB=<backbone> RES=<res> DS=<id>` | spec 002 |
 
 ### The manifest format (spec 001, `model_service/specs/001-manifests/spec.md`)
 
@@ -31,7 +31,7 @@ Piece 4 hands its two data artefacts to piece 3. Both are made by code and never
 
 ### The cache format (spec 002, `model_service/specs/002-cache/spec.md`)
 
-`data/cache/<backbone_id>/<res>/<cache_key>/<manifest>_v<N>.npz` holds `cls` and `meanpatch` (float16 `[N, 1024]`) and `image_id` and `sha256` (`[N]`), in the manifest's row order. Beside it, `.meta.json` holds the key fields, the manifest's sha256, the library versions and the timing. The key (backbone, weights sha256, resolution, preprocessing, compute dtype) is part of the path, so a new key never overwrites a cache. The 224 caches for both backbones and all five manifests were made on 2026-09-19 (`model_service/DECISIONS.md` 52).
+`data/cache/<backbone_id>/<res>/<cache_key>/<manifest>_v<N>.npz` holds `cls` and `meanpatch` (float16 `[N, 1024]`) and `image_id` and `sha256` (`[N]`), in the manifest's row order. Beside it, `.meta.json` holds the key fields, the manifest's sha256, the library versions and the timing. The key (backbone, weights sha256, resolution, preprocessing, compute dtype) is part of the path, so a new key never overwrites a cache. The 224 caches for both backbones and all five manifests were made on 2026-09-19 (`model_service/DECISIONS.md` 52), and the high-res ones (DINOv2 at 518, DINOv3 at 512) the same evening (83).
 
 ### For piece 3 (P)
 
