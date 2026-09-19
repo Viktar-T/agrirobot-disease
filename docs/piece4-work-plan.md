@@ -12,20 +12,20 @@ Method: spec-driven — each contract below gets a one-page spec (`model_service
 model_service/
   specs/            one folder per spec: 001-manifests/, 002-cache/, 003-heads/, 004-abstention/, 005-results-table/, 006-service/ — each with spec.md (+ plan.md, tasks.md when written)
   src/ms/           package: data/, cache/, heads/, abstain/, eval/, service/
-  configs/          backbones/*.yaml, datasets/*.yaml, heads/*.yaml, eval.yaml
-  tests/            pytest; fixtures/ibean_30/ (30 images, MIT — attribution file next to them)
+  configs/          backbones/*.yaml, datasets/*.yaml (downloads), manifests/*.yaml (manifest recipes), class_map_v1.yaml, heads/*.yaml, eval.yaml
+  tests/            pytest; fixtures/ibean_30/ (30 images, MIT, and their manifest ibean_v1.jsonl — attribution in its README)
   results/          n_table.jsonl, compute_log.jsonl, verdict.md  (small; tracked in git)
   cards/            model cards (markdown), one per registered model
   DECISIONS.md      dated choices, in the style of interface/README.md "choices the draft makes"
 data/                        (git-ignored; DVC from W2 — piece 3)
   raw/<dataset>/             as downloaded, untouched
-  manifests/<dataset>_<ver>.jsonl
-  cache/<backbone_id>/<res>/<dataset>.npz + meta.json
+  manifests/<manifest>_v<N>.jsonl + .meta.json; FROZEN.jsonl      (spec 001)
+  cache/<backbone_id>/<res>/<cache_key>/<manifest>_v<N>.npz + .meta.json   (spec 002)
   bags/                      piece 2
 mlruns/                      local MLflow (git-ignored) until piece 3 runs the server
 ```
 
-Make targets (all idempotent): `make env`, `make download DS=<name>`, `make manifests`, `make cache BB=<backbone_id> RES=224|518`, `make heads`, `make eval`, `make probe`, `make serve`, `make test`.
+Make targets (all idempotent): `make env`, `make download DS=<name>`, `make manifests DS=<name>`, `make cache BB=<backbone_id> RES=224|518|512 DS=<name>`, `make heads`, `make eval`, `make probe`, `make serve`, `make test`.
 
 ---
 
@@ -34,7 +34,7 @@ Make targets (all idempotent): `make env`, `make download DS=<name>`, `make mani
 | Spec | Artefact | Invariants (tests fail until true) | H8 | Week |
 |---|---|---|---|---|
 | **S4.1 Manifests** | `data/manifests/<dataset>_<ver>.jsonl` — one row per image: `image_id, sha256, path, dataset, source_record, class_raw, class_km2, group_keys{district, subcounty, date, region, session, phash_group}, split, split_rule, licence, attribution` | every row has a sha256 that matches the file; duplicates (exact or phash) share a `phash_group` and never straddle splits; `class_km2 ∈ {healthy, rust, anthracnose, unknown_als, unknown_wm}` and the two `unknown_*` classes never appear in a train split; `split_rule` is a non-empty string; the test manifest hash is recorded before any head is trained | §6.3 | W1–W2 |
-| **S4.2 Feature cache** | `data/cache/<backbone_id>/<res>/<dataset>.npz` (`cls[N,D]`, `meanpatch[N,D]` float16, `image_id[N]`) + `meta.json` (`backbone_id, weights_sha256, resolution, token_types, preprocess_string, transformers_version, torch_version, device, wallclock_s, images_per_s`) | cache key = (backbone_id, weights_sha256, resolution, preprocess_string); a changed weights hash yields a new cache; shapes match `meta.json`; re-running with the same key does nothing; `wallclock_s` is written to `results/compute_log.jsonl` (N7) | §6.4 | W2–W3 |
+| **S4.2 Feature cache** | `data/cache/<backbone_id>/<res>/<cache_key>/<manifest>_v<N>.npz` (`cls[N,D]` and `meanpatch[N,D]` float16, `meanpatch` averaging the patch tokens only; `image_id[N]`, `sha256[N]`) + `<manifest>_v<N>.meta.json` (the key fields and `cache_key`, `token_types`, `manifest_sha256`, `transformers_version`, `torch_version`, `device`, `batch_size`, `wallclock_s`, `images_per_s`; full list in spec 002 FR-006) | cache key = (backbone_id, weights_sha256, resolution, preprocess_string, compute_dtype), part of the path; a changed key yields a new cache and leaves the old one; shapes match the sidecar; re-running with the same key and manifest does nothing; runs resume from shards; every run writes its `wallclock_s` to `results/compute_log.jsonl` (N7) | §6.4 | W2–W3 |
 | **S4.3 Heads** | `ms.heads.train --backbone --res --head {linear,proto,mix} --seed --train-manifest --val-manifest` → `heads/<run_id>/head.pt + run.json` | same seed → identical weights; class-balanced sampling on by default; early stopping reads the in-domain validation slice only; seconds per run logged to the compute log | §6.5 | W3 |
 | **S4.4 Abstention + calibration** | `ms.abstain.fit` → thresholds `{tau_conf, tau_knn, tau_maha}` at declared coverages {0.80, 0.90, 0.95}; temperature `T` | thresholds and `T` are fitted on the in-domain validation slice and never touch a test manifest; `decision == "abstain"` is reachable on held-out unknowns; per-class abstention rate is reported | §6.6 | W4 |
 | **S4.5 Results table** | `results/n_table.jsonl` — one row per `(backbone_id, res, token_type, head, seed, train_manifest, test_manifest, number ∈ {N1,N2,N3,N4,N5,N6,N7}, metric, value, ci_low, ci_high, split_rule, coverage)` | every row carries `split_rule` and the two manifest hashes; N1 and N2 exist as a pair for every (backbone, head, res); N3 rows use only held-out classes; the champion/challenger verdict is computed from this file by code, not by hand | §6.7 | W3–W4 |
@@ -144,7 +144,7 @@ Expected: an afternoon if the GPU is there, a day on CPU. What it proves: the co
 ## 4. Conventions
 
 - **Backbone ids**: `dinov2_l14_reg`, `dinov3_l16`, optional `dinov3_b16`; a backbone is a YAML file, nothing else changes.
-- **Cache key**: `(backbone_id, weights_sha256, resolution, preprocess_string)`; `preprocess_string` = e.g. `resize_short=518;center_crop=518;norm=imagenet`.
+- **Cache key**: `(backbone_id, weights_sha256, resolution, preprocess_string, compute_dtype)`, and it is part of the cache path (spec 002; DECISIONS 11, 22–23); `preprocess_string` = e.g. `resize_short=518;center_crop=518;norm=imagenet`.
 - **Resolutions**: 224 for the fast pass (DINOv2 16×16 patches, DINOv3 14×14); 518 (DINOv2, 37×37) and 512 (DINOv3, 32×32) for the high-res pass. Sizes are multiples of the patch size.
 - **Tokens stored**: `cls` and `meanpatch`, float16; full patch tokens only for a 2,000-image subset (Makerere crops + SWM) in a separate file.
 - **Seeds**: 0–4; every reported number is mean ± 95 % interval over the five.
