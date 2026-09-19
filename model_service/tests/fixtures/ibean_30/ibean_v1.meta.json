@@ -5,13 +5,13 @@
   "role": "test_only",
   "rule": "unblocked:random_by_phash_group",
   "seed": 0,
-  "phash_threshold": 6,
+  "phash_threshold": 2,
   "class_map": {
     "path": "model_service/configs/class_map_v1.yaml",
     "version": 1,
     "sha256": "0af5627551004c08dc3ff5a9e7b3efda23e67e032fc08291d390b3f22bc8cea8"
   },
-  "recipe_sha256": "b5fcb606e72942795df8aa52405e192cc2292056b81650312349a69827288498",
+  "recipe_sha256": "ca0aa9045febeca1c9998bb7c810995c12748f1442ac70c6c42cc6da806d7f1c",
   "members": {
     "ibean": {
       "files": 30,
@@ -81,10 +81,10 @@
   "licence_source": "ibean/DOWNLOAD.json",
   "allow_unknown_licence": false,
   "manifest_sha256": "0944c0fa333ae8367d067ae566ec3bd01dad34d706a8c9c04db7868980d678b7",
-  "built_at": "2026-09-19T11:04:00Z",
+  "built_at": "2026-09-19T12:47:29Z",
   "builder": {
     "module": "ms.data.manifests",
     "version": "0.0.1",
-    "git_sha": "e042e56"
+    "git_sha": "40ab86e"
   }
 }

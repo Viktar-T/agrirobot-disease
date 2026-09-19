@@ -447,3 +447,67 @@ freezing comes with the Tanzania task, before any head (SC-6).
     - The crops live in `data/derived/`, not `data/raw/`, which stays as downloaded. The
       sidecar names that root, and `validate` and the cache read the files there. Crops have
       no recipe file: `crops` derives them from the parent manifest and `--margin`.
+
+## 2026-09-19 — W2 · Tanzania, the pHash threshold, and the manifests frozen (ahead of schedule)
+
+The work plan's "Wed–Thu — Tanzania", ending with the freeze. The owner decided the freeze
+and tz3's place in it on 2026-09-19, after the tz3 test below.
+
+47. **tz3 adds images; `tanzania_v1` is frozen without it.** The owner allowed the test
+    download of `RUST_6.zip` (0.91 GB, Zenodo 16751336, checksum verified).
+    - None of its 321 rust photos is an exact copy of a tz155k or tz59k file. None lies within
+      8 pHash bits of a `tanzania_v1` picture, under any of four turns.
+    - They are full resolution (4160×3120; tz155k is 1000×750). The 12 that carry a date were
+      taken on 2024-12-24, after tz155k's last day. The other 309 carry no capture date, so
+      `blocked:date` could place almost none of them: they would join the split at random.
+    - Decision: freeze `tanzania_v1` from tz155k and tz59k (spec 001 Clarification 3). The
+      rest of tz3 (19 archives, about 46 GB) is a later decision. It may serve better as a
+      manifest of its own, a later-in-time test, than as a member of `tanzania`. The config's
+      `hold` records this.
+48. **The pHash threshold is 2 bits, not 6** (spec 001 Clarification 4, closed). Every code
+    has 32 one-bits, so distances are even: 2 and 3 are the same rule.
+    - Copies re-saved at quality 70 or 50, or halved and re-saved, move at most 2 bits. This
+      was measured on 300 real images each from iBean, Makerere and tz155k. The distinct
+      images in those samples lie 10 or more bits apart, apart from one byte-identical pair
+      in tz155k.
+    - At 6 bits, `tanzania` had 26,131 pairs. The 73 that cross capture dates were false
+      matches in every one inspected: other leaves, other diseases, down to 2 bits. Close-up
+      leaves share one low-frequency layout, a vein across green. These pairs chained 20
+      dates into one block and split anthracnose 0.987/0.0001/0.013. A 300-image sample
+      could not show this; 6.3·10^9 pairs can.
+    - At 2 bits one cross-date link remains. It is false too, and joins two healthy dates.
+      Same-date copies at 4–6 bits are real, but under `blocked:date` they share a block
+      anyway.
+    - The four recipes, the two W1 test lines that pinned the draft value, and FR-006 now say
+      2. `ibean_v1` keeps its bytes (no pair at 6). `makerere_v1` changes in one pair's
+      group ids only; its blocks and split are those of 44, sha256 `0670c68b…4bde`.
+49. **`tanzania_v1.jsonl`: 112,176 rows** (healthy 97,048, rust 8,243, anthracnose 6,885).
+    sha256 `bf50c32a…acb1`.
+    - Records: tz155k has 155,841 files, 112,219 distinct; tz59k has 59,071 files, 36,684
+      distinct, of which 36,683 are also in tz155k. 53,018 rows carry 102,444 exact copies.
+    - Excluded: 287 files of images held under two labels (`label_conflict`), and 5 that do
+      not decode (`decode_error`), which the W1 note did not list.
+    - Near duplicates: 2,394 groups at 2 bits (6,549 rows, the largest 50); 3 groups mix
+      classes.
+    - Blocks: 143 capture dates (train 67, val 38, test 38), one merged pair, and one row
+      without EXIF, split unblocked. Shares: healthy and rust 0.70/0.10/0.20, anthracnose
+      0.69/0.12/0.19. Days: healthy 122, rust 38, anthracnose 20, from 2022-10-21 to
+      2024-09-25.
+50. **`swm_v1.jsonl`: 684 rows, all `unknown_wm`** (White Mold 202, Mature Sclerotium + White
+    Mold 482). 594 originals showing only apothecia or sclerotia are excluded by the class
+    map, and so are the 1,278 drawn-box renderings. sha256 `601234ce…072c`.
+51. **The frozen manifests** (spec 001 US-5; `data/manifests/FROZEN.jsonl`). All were frozen
+    on 2026-09-19 at git `40ab86e` plus this commit's threshold of 2, after `validate` with
+    file hashes passed. `makerere_crops_v1` was frozen after its parent.
+
+    | manifest | rows | sha256 |
+    |---|---|---|
+    | `ibean_v1.jsonl` | 1,295 | `423a16666a4880ddf9b2bb934a29b614c834a1b9ba7170b4d8b994935bb86060` |
+    | `makerere_v1.jsonl` | 15,402 | `0670c68b51f5da3cf8be67aebf0d5da1eae2c9db0828dc0018eceadb974b4bde` |
+    | `makerere_crops_v1.jsonl` | 27,019 | `efab8bb093a6579cc22355931bac2f5de3c60b126835ea423353bff417752ea2` |
+    | `swm_v1.jsonl` | 684 | `601234cedaa7e2a73d59520d95b5dbed9a51950ffc29d5c9b0947d4d5b5a072c` |
+    | `tanzania_v1.jsonl` | 112,176 | `bf50c32afb273d6bed60aa288b4a0d29bce04d60e0371d1732887f605e36acb1` |
+
+    "Frozen before any head" (SC-6): this list comes before every W3 head run. The one
+    earlier head, the W2 slice's, was trained on `ibean_v1` with these same bytes, and it is
+    never quoted (35).

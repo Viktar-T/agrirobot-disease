@@ -19,4 +19,4 @@ role: train_eval
 rule: blocked:date
 group_keys: [date]
 seed: 0
-phash_threshold: 6
+phash_threshold: 2  # spec 001 Clarification 4 (closed 2026-09-19; DECISIONS 48)

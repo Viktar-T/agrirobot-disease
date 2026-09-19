@@ -535,7 +535,7 @@ def test_each_recipe_names_its_members_role_rule_and_keys():
         assert set(r["group_keys"]) <= set(GROUP_KEYS) - {"phash_group"}, name
         if r["rule"].startswith("blocked:"):
             assert r["rule"].removeprefix("blocked:") in r["group_keys"], name
-        assert (r["seed"], r["phash_threshold"]) == (0, 6), name
+        assert (r["seed"], r["phash_threshold"]) == (0, 2), name  # Clarification 4
     # the dataset table of spec 001
     got = {n: (r["members"], r["role"], r["rule"], r["group_keys"]) for n, r in recipes.items()}
     assert got == {
@@ -618,7 +618,7 @@ def test_us1_rows_carry_every_contract_field(tmp_path, capsys):
         assert r["split"] in (*SPLITS, "holdout_unknown")
     m = meta(manifest)
     assert m["manifest"] == "ibean" and m["version"] == 1
-    assert (m["role"], m["rule"], m["seed"], m["phash_threshold"]) == ("test_only", UNBLOCKED, 0, 6)
+    assert (m["role"], m["rule"], m["seed"], m["phash_threshold"]) == ("test_only", UNBLOCKED, 0, 2)
     assert m["manifest_sha256"] == sha256(manifest)
     assert m["counts"]["rows"] == len(rs)
     assert m["counts"]["class_raw"] == dict(Counter(r["class_raw"] for r in rs))

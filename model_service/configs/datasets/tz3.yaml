@@ -7,4 +7,6 @@ source:
 expect_licence: CC-BY-4.0
 hold: >-
   Spec 001 Clarification 3: download in full only if it adds images not in tz155k/tz59k.
-  Test first with the smallest archive: --files RUST_6.zip (0.91 GB).
+  Tested 2026-09-19 with the smallest archive (--files RUST_6.zip, 0.91 GB): it adds 321
+  new rust photos, 309 of them without a capture date. tanzania_v1 was frozen without tz3;
+  the full download is the owner's decision (DECISIONS 47).

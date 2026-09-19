@@ -1399,7 +1399,7 @@ def overlap(a: Path, b: Path, *, log: Log = _print) -> int:
     rows_b = _parse_rows(Path(b).read_text(encoding="utf-8"))
     side = sidecar_path(Path(a))
     meta = json.loads(side.read_text(encoding="utf-8")) if side.exists() else {}
-    threshold = int(meta.get("phash_threshold", 6))
+    threshold = int(meta.get("phash_threshold", 2))
     exact = len({r["sha256"] for r in rows_a} & {r["sha256"] for r in rows_b})
     pairs = phash_pairs([r["phash"] for r in rows_a], [r["phash"] for r in rows_b], threshold)
     near = sum(1 for i, j in pairs if rows_a[i]["sha256"] != rows_b[j]["sha256"])
