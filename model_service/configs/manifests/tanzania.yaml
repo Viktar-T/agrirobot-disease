@@ -1,0 +1,22 @@
+# Manifest recipe - spec 001: data/manifests/tanzania_v1.jsonl from data/raw/tz155k/ and
+# data/raw/tz59k/. One manifest for the Tanzanian family, not one per record: tz59k is
+# inside tz155k (W1 data note, finding 1), and N2/N4 treat Tanzania as one source. One row
+# per distinct image; a picture held by both records takes its `path` from the first member
+# listed (tz155k), and the other copies go into `dup_paths` (finding 2). tz3 joins the
+# members only if its RUST_6.zip test shows new images (Clarification 3); that is v2.
+#
+# Blocked by capture date (Clarification 2): the archives are flat class folders split into
+# chunks (healthy1..healthy11), with no region or session in folder names or an index; the
+# tz59k record states a single region (Mbeya). Every image carries EXIF DateTimeOriginal
+# (+03:00) except one rust picture without EXIF, held by both records (W1 scan,
+# 2026-09-19). That row is split by its phash_group with split_rule
+# unblocked:random_by_phash_group (spec 001 US-3.2). File-name timestamps are not capture
+# times: they agree with DateTimeOriginal for under half of the tz155k healthy images.
+manifest: tanzania
+version: 1
+members: [tz155k, tz59k]
+role: train_eval
+rule: blocked:date
+group_keys: [date]
+seed: 0
+phash_threshold: 6

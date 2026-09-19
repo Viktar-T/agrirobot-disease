@@ -1,0 +1,42 @@
+# Class map v1 - spec 001 FR-007: each source's label (class_raw, verbatim) -> KM2 class.
+#
+# Keyed by manifest (configs/manifests/<manifest>.yaml), then by class_raw exactly as the
+# source writes it (folder name or annotation label; see the spec's dataset table).
+# A label that is not listed fails the build with `unmapped_class`; nothing is dropped
+# silently. `excluded` is a known label that is deliberately not a KM2 class: the image
+# gets no row and is listed in meta.json.excluded as `excluded_by_class_map`.
+#
+# Additive only: entries may be added for a new manifest; an entry never changes once a
+# manifest built with it is frozen - a changed entry is class_map_v2.yaml.
+version: 1
+
+classes:
+  trained: [healthy, rust, anthracnose]  # the KM2 classes with data; the heads learn these
+  unknown: [unknown_als, unknown_wm]     # held-out unknowns: split holdout_unknown, never trained on
+  unlabelled: [none]                     # no disease label (ACRE, stretch): test only
+
+map:
+  ibean:  # folder names: extracted/<split>/<class>/
+    healthy: healthy
+    bean_rust: rust
+    angular_leaf_spot: unknown_als
+
+  makerere:  # XML <class> (also the box labels); "healthy" from the folder (no XML)
+    healthy: healthy
+    Bean Rust: rust
+    ALS: unknown_als
+
+  tanzania:  # folder names without the chunk digits (healthy1..healthy11 -> healthy), tz155k and tz59k alike
+    healthy: healthy
+    rust: rust
+    anthra: anthracnose
+
+  swm:  # Pascal VOC object names; a picture with several labels: distinct names, sorted, joined " + "
+    White Mold: unknown_wm
+    Mature Sclerotium + White Mold: unknown_wm
+    # the SWM 300-px crops' label, verbatim (sic); used by swm_crops (US-6, P2)
+    Imature Sclerotium and White Mold: unknown_wm
+    # soil-borne life stages, not a leaf symptom (configs/datasets/swm.yaml)
+    Apothecium: excluded
+    Mature Sclerotium: excluded
+    Apothecium + Mature Sclerotium: excluded

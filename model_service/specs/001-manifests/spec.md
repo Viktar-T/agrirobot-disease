@@ -1,136 +1,192 @@
 # Feature specification: 001 — Dataset manifests
 
-**Branch**: `001-manifests` · **Created**: 2026-09-17 · **Status**: Draft (for `/clarify`, then `/plan`)
-**Input**: H8 §6.3 (data preparation), `docs/piece4-work-plan.md` S4.1, the E1 dataset audit (`50_E1_audit-of-existing-datasets.md`). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
+**Branch**: `001-manifests` · **Created**: 2026-09-17 · **Clarified**: 2026-09-19, against the data on disk · **Status**: Clarified, next `/plan`; acceptance tests in `model_service/tests/test_manifests.py`, red until the W2 implementation
+**Input**: H8 §6.3 (data preparation), `docs/piece4-work-plan.md` S4.1, the E1 dataset audit (`50_E1_audit-of-existing-datasets.md`), the W1 data note (`data/README.md`, findings 1–10). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
 
 ## Why
 
-Everything in piece 4 — feature caches (002), heads (003), abstention (004), the results table (005) and the service's cached-hash path (006) — reads images through **one manifest per dataset version** instead of through folder names. The manifest fixes three things that cannot be repaired later: the identity of every image (a content hash), the class map from each source's labels to the KM2 classes, and the **split with its rule**, frozen before any head is trained (H8 §2 D-9). Without it, the first accuracy number leaks through duplicates and the "two numbers" of D-1 cannot be printed with their split rule.
+Everything in piece 4 — feature caches (002), heads (003), abstention (004), the results table (005) and the service's cached-hash path (006) — reads images through **one manifest per dataset version** instead of through folder names. The manifest fixes three things that cannot be repaired later: the identity of every image (a content hash), the class map from each source's labels to the KM2 classes, and the **split with its rule**, frozen before any head is trained (H8 §2 D-9). Without it, the first accuracy number leaks through duplicates, and the "two numbers" of D-1 cannot be printed with their split rule.
+
+## Commands
+
+`python -m ms.data.manifests <verb>`; `make manifests DS=<manifest>` runs `build`. Defaults come from the recipe `configs/manifests/<manifest>.yaml` (FR-001).
+
+- `build --dataset <manifest> [--raw-root data/raw] [--out data/manifests] [--version N] [--seed N] [--rule R] [--phash-threshold N] [--allow-unknown-licence]` exits 0 when the manifest is written or unchanged, 2 on a build error (nothing written), and 3 when the build would change a frozen manifest.
+- `validate <file.jsonl> [--raw-root data/raw] [--frozen-list <dir>/FROZEN.jsonl]` exits 0, 2 on a content violation, and 3 on a freeze violation.
+- `freeze <file.jsonl>` exits 0 or 2. `overlap <a.jsonl> <b.jsonl>` prints one JSON object with the `exact` and `near` counts and exits 0. `crops …` is P2 (US-6).
 
 ## User scenarios and testing
 
-### US-1 — Build a manifest from a raw dataset folder (priority P1)
+### US-1: Build a manifest from the raw folders (priority P1)
 
-As the ML role, I run one command over `data/raw/<dataset>/` and get a manifest whose rows identify every image by content, carry its provenance and licence, its raw and KM2 class, its grouping keys and its split.
+As the ML role, I run one command over `data/raw/<member>/` and get a manifest whose rows identify every distinct image by content and carry its provenance and licence, its raw and KM2 class, its grouping keys and its split.
 
-Acceptance scenarios:
+1. **Given** the fixture `tests/fixtures/ibean_30/`, laid out like `data/raw/` (`ibean/DOWNLOAD.json` and `ibean/extracted/<split>/<class>/`, 10 images per source class, next to `LICENSE-MIT`), **when** `build --dataset ibean --raw-root tests/fixtures/ibean_30 --out <tmp>` runs, **then** the manifest has 30 rows and every `sha256` matches the bytes at `path`. `class_km2` is `healthy` ×10, `rust` ×10 and `unknown_als` ×10. The `unknown_als` rows are `holdout_unknown`; the others fall in train, val and test with `split_rule = unblocked:random_by_phash_group`. The sidecar reports the same counts and `role = test_only`.
+2. **Given** the same raw folders built twice, **then** the two `.jsonl` files are byte-identical and the second build rewrites nothing. This follows from stable ordering, content-derived ids and the seed in the recipe.
+3. **Given** a member holding a file that is not an image (iBean holds a renamed `.DS_Store`, `train/healthy/healthy_train.120tore`, finding 9) and a truncated JPEG, **then** neither gets a row. Both are in `meta.json.excluded`, with `not_an_image` and `decode_error`, and the build exits 0.
+4. **Given** any build, **then** every file under the folders the reader scans ends up in exactly one place: a row's `path`, a row's `dup_paths`, an annotation file the reader consumed, or `meta.json.excluded` with a reason. Nothing is dropped silently.
 
-1. **Given** the fixture `tests/fixtures/ibean_30/` (30 iBean images, 10 per source class), **when** `ms manifests build --dataset ibean --raw-root tests/fixtures --out <tmp>`, **then** the manifest has 30 rows, every `sha256` matches the file bytes, `class_km2` is `healthy` ×10, `rust` ×10, `unknown_als` ×10, every row has `split = test` and `split_rule = test_only`, and the sidecar `meta.json` reports the same counts.
-2. **Given** the same raw folder built twice, **when** the two outputs are compared, **then** they are byte-identical (stable ordering, ids derived from content, fixed seed recorded in the sidecar).
-3. **Given** a raw folder containing one non-image file and one corrupt JPEG, **when** built, **then** neither gets a row; both appear in `meta.json.excluded` with a reason (`not_an_image`, `decode_error`), and the build exits 0.
+### US-2: Duplicates never straddle a split (P1)
 
-### US-2 — Duplicates never straddle a split (P1)
+1. **Given** one file under two names with the same label, **then** it gets one row: `path` is the first copy (member order, then path order) and the other name goes into `dup_paths`. For scale, tz155k holds 43,622 extra copies (finding 2).
+2. **Given** one file under two labels, **then** it gets no row, and every copy is excluded with `label_conflict`. tz155k holds 41 such images (finding 3).
+3. **Given** an image and a copy re-encoded as JPEG quality 70, **then** the two rows share one `phash_group` and one split. Their Hamming distance is at most the `phash_threshold` in `meta.json`.
+4. **Given** `tz155k` and `tz59k`, where tz59k is inside tz155k (finding 1), **when** `build --dataset tanzania` runs, **then** there is one row per distinct image across both records. `path` lies in the first member of the recipe (tz155k) and the copies in the other record are in `dup_paths`. `meta.json.members` gives, per record, the files scanned, the distinct images among them, and the distinct images shared with each other record.
+5. **Given** a manifest in which one `phash_group` or `split_group` has rows in more than one of {train, val, test}, **when** it is validated, **then** it exits 2 and the first reason printed is `group_straddles_split`, with the group id and the row numbers.
+6. **Given** manifests of two sources, **when** `overlap a.jsonl b.jsonl` runs, **then** the shared images (same `sha256`, `exact`) and the near pairs (different bytes, pHash within the threshold, `near`) are printed. Duplicates across manifests are reported, never merged. Finding 4 found no exact overlap between Tanzania, Makerere and iBean.
 
-As the ML role, I need exact and near-duplicate images to be detected and kept together, so that within-dataset numbers are not inflated and the Tanzanian records' overlap is measured rather than guessed (H6 B2).
+### US-3: Blocked splits with a printed rule (P1)
 
-Acceptance scenarios:
+As the ML role, I need the split to follow the acquisition structure the source publishes, and every downstream table to be able to print the rule that produced it.
 
-1. **Given** a raw folder where one file exists under two names, **when** built, **then** both rows share `sha256`, the second carries `exact_dup_of = <image_id of the first>`, and both share one `phash_group`.
-2. **Given** an image and a copy re-encoded as JPEG at quality 70, **when** built, **then** the two rows share one `phash_group` (Hamming distance on the 64-bit pHash ≤ the threshold recorded in `meta.json`).
-3. **Given** manifests for `tz155k` and `tz59k`, **when** `ms manifests overlap tz155k_v1.jsonl tz59k_v1.jsonl`, **then** the number of shared `sha256` values is printed and written to both sidecars as `overlap.<other dataset>`; rows shared across the two carry `exact_dup_of` pointing at the `tz155k` row.
-4. **Given** any manifest in which one `phash_group` has rows in more than one of {train, val, test}, **when** `ms manifests validate`, **then** the exit code is 2 and the first reason printed is `group_straddles_split` with the group id and the row numbers.
+1. **Given** Makerere, **when** it is built (`blocked:district`), **then** no district has rows in more than one of {train, val, test}, and every trained-class row carries `split_rule = blocked:district`. `meta.json.splits` lists, per split, the blocks and their row counts.
+2. **Given** rows that lack the blocking key, **then** each joins the block of the key values that rows of any class carry on the same capture `date`. Held-out rows count here: they record where the team was that day, and they are still never trained on. On 26 Apr only angular leaf spot was annotated. A date with several districts merges them into one block: on 25–26 Apr, Bugiri and Mayuge form `district:Bugiri+Mayuge`. The key stays null in `group_keys`, because it is not invented (FR-013). Makerere healthy images have no XML, so this is how they are placed. A row that still cannot be placed is split by its `phash_group` with `split_rule = unblocked:random_by_phash_group`; `meta.json` counts rows per rule and warns `partly_unblocked`.
+3. **Given** Tanzania, **when** it is built (`blocked:date`), **then** no capture date has rows in more than one split.
+4. **Given** iBean, which has no grouping metadata, **then** `split_rule = unblocked:random_by_phash_group`, groups are atomic, and `meta.json.warnings` contains `unblocked`.
+5. **Given** `--rule blocked:district` on a manifest where no row has a district, **then** the build exits 2 with `rule_not_applicable` and writes nothing.
+6. **Given** any within-dataset split, **then** every trained class present in the manifest has rows in each of train, val and test. If no assignment of whole groups can achieve that, the build exits 2 with `class_missing_from_split` and writes nothing.
+7. **Given** a manifest, **when** any consumer (cache, heads, eval, service) prints a number derived from it, **then** the number carries `split_rule` and the manifest hash. Spec 005 enforces this; the fields exist here.
 
-### US-3 — Blocked splits with a printed rule (P1)
+### US-4: The class map and the held-out unknowns (P1)
 
-As the ML role, I need the split to follow the acquisition structure the source provides (district, sub-county, date, region, session), and every downstream table to be able to print the rule that produced it.
+1. **Given** a `class_raw` that is not in `configs/class_map_v1.yaml`, **then** the build fails with `unmapped_class`, naming the value, and nothing is written.
+2. **Given** rows with `class_km2 ∈ {unknown_als, unknown_wm}`, **then** `split` and `split_rule` are both `holdout_unknown`. If one of them is found in train or val, validation fails with `unknown_in_train`.
+3. **Given** a label that the map sends to `excluded` (SWM pictures with only apothecia or sclerotia), **then** it gets no row, and the image is in `meta.json.excluded` with `excluded_by_class_map`.
+4. **Given** rows with `class_km2 = none` (ACRE, a stretch goal), **then** `split = test` and `split_rule = test_only`. If one of them is found in train or val, validation fails with `unlabelled_in_train`.
 
-Acceptance scenarios:
+### US-5: Freeze (P1)
 
-1. **Given** Makerere rows with `group.district`, `group.subcounty` and `group.capture_date`, **when** built with `--rule blocked:district`, **then** no district value appears in more than one split, `split_rule = blocked:district` on every row, and `meta.json.splits` lists the districts per split with their row counts.
-2. **Given** a dataset with no usable grouping metadata, **when** built with `--rule unblocked`, **then** the split is random over `phash_group` (groups atomic), `split_rule = unblocked:random_by_phash_group`, and the sidecar carries `warning: unblocked`.
-3. **Given** `--rule blocked:district` and a dataset whose rows lack `group.district`, **when** built, **then** the build fails with `rule_not_applicable` and no manifest is written.
-4. **Given** a manifest, **when** any consumer (cache, heads, eval, service) prints a number derived from it, **then** the number carries `split_rule` and the manifest hash — enforced by 005, but the fields must exist here.
+As the ML role, I declare a manifest version frozen before the first head is trained. From then on it is immutable, and its test split is unreadable to training and selection code.
 
-### US-4 — The class map and the held-out unknowns (P1)
+1. **Given** `freeze data/manifests/makerere_v1.jsonl`, **then** the file's sha256 is appended to `data/manifests/FROZEN.jsonl` as `{manifest, sha256, frozen_at, git_sha}` and the line for `DECISIONS.md` is printed. Freezing it again adds nothing.
+2. **Given** a frozen manifest whose bytes later change, **then** validation reports `frozen_manifest_modified` and exits 3, and the loader refuses the file.
+3. **Given** a loader call for `test` or `holdout_unknown` with `purpose = train` or `select`, **then** it raises `TestSplitAccessError`. Only `evaluate` and `serve` can read them.
+4. **Given** a frozen version, **when** a build would change it, **then** the build exits 3 and leaves the file untouched. The change becomes `<manifest>_v2.jsonl`, and v1 stays as it was, frozen.
+5. **Given** a manifest with `licence = unknown`, **then** it can only be built with `--allow-unknown-licence`, which the sidecar records, and `freeze` refuses it with `licence_unknown` (exit 2).
 
-As the ML role, I need each source's label mapped to the KM2 classes by a fixed, versioned table, with angular leaf spot and white mould kept as **held-out unknowns** that are never trained on (H8 §6.3).
+### US-6: Crops manifests (P2; tests are written with its plan in W2)
 
-Acceptance scenarios:
-
-1. **Given** the class map `configs/class_map_v1.yaml`, **when** a row's `class_raw` is not in the map, **then** the build fails with `unmapped_class` naming the value; nothing is silently dropped.
-2. **Given** any row with `class_km2 ∈ {unknown_als, unknown_wm}`, **when** validated, **then** its `split` is `holdout_unknown`; a row of these classes in `train` or `val` fails validation with `unknown_in_train`.
-3. **Given** ACRE rows (no disease labels), **when** built, **then** `class_km2 = none`, `split = test`, `split_rule = test_only`; a `none` row in `train` or `val` fails validation with `unlabelled_in_train`.
-
-### US-5 — Freeze (P1)
-
-As the ML role, I declare a manifest version frozen before the first head is trained; from then on it is immutable and its test split is unreadable to training and selection code.
-
-Acceptance scenarios:
-
-1. **Given** `ms manifests freeze data/manifests/makerere_v1.jsonl`, **when** it runs, **then** the file's sha256 is appended to `data/manifests/FROZEN.jsonl` (`{manifest, sha256, frozen_at, git_sha}`), and the same line is proposed for `model_service/DECISIONS.md`.
-2. **Given** a frozen manifest whose bytes later change, **when** validated, **then** `frozen_manifest_modified` is reported and the exit code is 3.
-3. **Given** a frozen manifest, **when** a loader is asked for `split = test` with `purpose = train` or `purpose = select`, **then** it raises `TestSplitAccessError`; `purpose = evaluate` is the only way to read the test split.
-4. **Given** a change is needed after the freeze (a corrected label, a new duplicate rule), **when** it is made, **then** it produces `<dataset>_v2.jsonl`; `v1` stays as it was and stays frozen.
-
-### US-6 — Crops manifest for Makerere (P2)
-
-As the ML role, I need a second manifest derived from the Makerere bounding boxes, so that the organ-level run (H8 §6.7 N2 "crop-level") is possible without changing the readers.
-
-Acceptance scenarios:
-
-1. **Given** `makerere_v1.jsonl` with `boxes`, **when** `ms manifests crops makerere_v1.jsonl --margin 0.10`, **then** `makerere_crops_v1.jsonl` has one row per box with `parent_image_id`, `box_index`, its own `sha256` (of the written crop file), the parent's `group`, `split` and `split_rule` inherited unchanged, and `class_km2` from the box label.
-2. **Given** the crops manifest, **when** validated, **then** every `parent_image_id` exists in the parent manifest and no parent's crops straddle splits.
+1. **Given** `makerere_v1.jsonl` with `boxes`, **when** `crops makerere_v1.jsonl --margin 0.10` runs, **then** `makerere_crops_v1.jsonl` has one row per box. Each row carries `parent_image_id`, `box_index` and its own `sha256` (of the written crop). It inherits the parent's `group_keys`, `split` and `split_rule` unchanged, and takes `class_km2` from the box label.
+2. **Given** a crops manifest, **when** it is validated, **then** every `parent_image_id` exists in the parent manifest, and no parent's crops straddle splits.
+3. `swm_crops` holds the source's 300-px SWM crops, each linked to its R-SWM original by file name.
 
 ### Edge cases
 
-- Two source records that are supersets of each other (Tanzania #1 / #2 / #3, relation unstated `[C98]`): built as separate manifests; overlap measured (US-2.3); the pooled training set for heads is defined in 003 as "tz155k plus tz59k rows not marked `exact_dup_of`".
-- Images with EXIF orientation: the hash is of the stored bytes (never of a re-oriented decode); width/height are the decoded, orientation-applied values.
-- Makerere licence differs between the datasheet (CC BY) and a mirror (CC0): the manifest records what the Dataverse record itself says; until it is read, `licence = unknown` and the build needs `--allow-unknown-licence` (see Clarifications).
-- A dataset with region metadata only in folder names (possible for Tanzania): the folder structure is parsed into `group.session` and reported; if nothing is there, the rule is `unblocked` and says so.
+- **Capture date** is the local calendar day of the capture, taken from one source per dataset.
+  - **Makerere**: the XML `datetime`. For images without XML, the date comes from the file name, read as Unix milliseconds in UTC+03:00 (the offset of the XML datetimes). The file name falls on the XML's day for 10,116 of 10,118 annotated images. EXIF is not used, because it was rewritten after the trip: IFD0 `DateTime` reads 2021-08-07, and `DateTimeOriginal` is missing in 361 healthy images and dated after the trip (2021-06-10, 2021-08-11) in 306.
+  - **Tanzania**: EXIF `DateTimeOriginal`, never IFD0 `DateTime`. The file names are not capture times; they disagree with `DateTimeOriginal` for over half of tz155k's healthy images.
+- **EXIF orientation**: the hash is taken over the stored bytes. `width` and `height` are orientation-applied, and boxes stay in the source's coordinates.
+- **Makerere class ↔ trip confound** (finding 6): every healthy image comes from the April trip, so only the four April blocks (Mubende, Hoima, Kiboga, Bugiri + Mayuge) can carry healthy into val and test. The manifest shows this rather than hiding it; N1 and N4 have to name it.
+- **Adjacent days** (Tanzania): blocking by day removes same-session duplicates, but not the likeness of a farm revisited the next day. The N1 reading has to name this.
+- **Near-duplicate chains**: pHash components can link blocks and merge them. Merged blocks show in `split_group` and `meta.json.splits`.
+- **tz3**: if its test shows new images, it joins the `tanzania` members and the result is `tanzania_v2`.
 
 ## Requirements
 
 ### Functional
 
-- **FR-001** One manifest per (dataset, version): `data/manifests/<dataset>_v<N>.jsonl` (JSON Lines, UTF-8, LF, one object per line, rows sorted by `image_id`) plus a sidecar `data/manifests/<dataset>_v<N>.meta.json`.
-- **FR-002** Datasets in scope and their ids: `tz155k` (Tanzania 2025, Zenodo 15685315 `[C01][C02]`), `tz59k` (Tanzania 2023, Zenodo 8286126 `[C03]`), `tz3` (Tanzania 2025-11, Zenodo 16751336 `[C98]`, optional — only if US-2.3 shows new images), `makerere` (Lacuna beans, Harvard Dataverse doi:10.7910/DVN/TCKVEW `[C99]`), `ibean` (Makerere AI Lab GitHub original, MIT `[C05]`), `swm` (white mould crops `[C18]`), `acre` (stretch, `[C16]`).
-- **FR-003** Row fields (all present; nullable where marked): `manifest_version` ("1"); `image_id` = `<dataset>_<sha256[:16]>`, charset `[A-Za-z0-9_.-]`, ≤ 128 chars, unique in the file; `dataset`; `source_record` (DOI or record URL), `source_version` (record version or download date); `path` (relative to `data/raw/`, POSIX separators); `sha256` (64 hex, file bytes as stored); `phash` (16 hex, 64-bit pHash of the decoded image), `phash_group` (string); `exact_dup_of` (image_id or null); `width`, `height` (int), `format` (`jpeg`/`png`); `class_raw` (the source's label, verbatim); `class_km2` ∈ {`healthy`, `rust`, `anthracnose`, `unknown_als`, `unknown_wm`, `none`}; `boxes` (list of `{x, y, w, h, class_raw}` in pixels, or null); `group` (object: `district`, `subcounty`, `region`, `session`, `capture_date` (ISO date), `device`, `variety`, `plant_age` — each nullable) and `group_key` (the composed key actually used for blocking, or null); `split` ∈ {`train`, `val`, `test`, `holdout_unknown`, `unassigned`}; `split_rule` (non-empty string from the fixed vocabulary below); `licence` ∈ {`CC-BY-4.0`, `CC0-1.0`, `MIT`, `unknown`}; `attribution` (the attribution line, verbatim); `notes` (string or null).
-- **FR-004** `split_rule` vocabulary: `blocked:<key>[+<key>…]` (e.g. `blocked:district`, `blocked:district+capture_date`), `unblocked:random_by_phash_group`, `test_only`, `holdout_unknown`. Anything else fails validation.
-- **FR-005** Sidecar `meta.json`: dataset, version, build timestamp, `git_sha` of the builder, `builder_version`, `seed`, `phash_threshold`, `rule`, counts per `class_raw`, per `class_km2` and per `split`, `splits` (group values per split when blocked), `excluded` (path + reason), `overlap` (per other dataset, once computed), `licence_source` (what the licence field was read from), and `manifest_sha256` (of the `.jsonl` file).
-- **FR-006** Duplicate handling: exact duplicates by `sha256` within a dataset and across the Tanzanian family; near-duplicates by pHash connected components at Hamming ≤ `phash_threshold` (default 6, recorded); groups are atomic for splitting; cross-family duplicates (Tanzania ↔ Makerere/iBean) are reported in `overlap`, never merged.
-- **FR-007** Class map: `configs/class_map_v1.yaml`, one table `dataset → class_raw → class_km2`, versioned; `unknown_*` rows are always `holdout_unknown`; `none` rows are never in `train`/`val`.
-- **FR-008** Split proportions within a dataset when a within-dataset split is made: train 70 % / val 10 % / test 20 % **of groups**, seeded; iBean is `test_only`; `swm` is `holdout_unknown`; `acre` is `test_only` with `class_km2 = none`.
-- **FR-009** Validation CLI `ms manifests validate <file> [--frozen-list data/manifests/FROZEN.jsonl]`: exit 0 on success; 2 on a content violation; 3 on a freeze violation; every failure names the reason from the fixed list (`sha256_mismatch`, `duplicate_image_id`, `group_straddles_split`, `unknown_in_train`, `unlabelled_in_train`, `unmapped_class`, `bad_split_rule`, `missing_field`, `licence_unknown`, `frozen_manifest_modified`) and the row number.
-- **FR-010** Licence gate: a row with `licence = unknown` fails validation unless the manifest was built with `--allow-unknown-licence`, which is recorded in the sidecar; frozen manifests may not contain `unknown` licences.
-- **FR-011** Loader API (used by 002–006): `load_manifest(path, split, purpose)` with `purpose ∈ {train, select, evaluate, serve}`; `test` of a frozen manifest is readable only with `purpose = evaluate`; `holdout_unknown` only with `evaluate`; the loader returns the manifest sha256 alongside the rows so that every consumer can record it.
-- **FR-012** Crops manifest (US-6): derived, never hand-edited; margin recorded; parent linkage; inherited group/split/rule.
-- **FR-013** No fields beyond what the source publishes; GPS and dates from Makerere are kept as published under the source's licence and are not re-published by this project except through the source record.
+- **FR-001** One manifest per (manifest id, version): `data/manifests/<manifest>_v<N>.jsonl` plus `<manifest>_v<N>.meta.json`. The `.jsonl` is JSON Lines in UTF-8 with LF, one object per line, keys in FR-003 order and rows sorted by `image_id`. Each manifest id has a recipe `configs/manifests/<manifest>.yaml` holding:
+  - `members`: the raw datasets under `data/raw/`, in precedence order;
+  - `role`: `train_eval`, `test_only` or `holdout_unknown`, i.e. what the protocol may use the manifest for (003 and 005 enforce it);
+  - `rule`, `group_keys`, `seed`, `phash_threshold` and `version`.
+- **FR-002** The raw datasets are `configs/datasets/` (downloads, W1). The manifests built from them are listed in the table below. `tz3` (Zenodo 16751336) joins `tanzania` only if its test shows new images. `acre` is a stretch goal.
+- **FR-003** Row fields, all present and nullable only where marked:
+  - `manifest_version`: `"1"`.
+  - `image_id`: `<manifest>_<sha256[:16]>`, unique, one row per distinct image.
+  - `dataset`: the manifest id.
+  - `source_record`: `https://doi.org/<doi>`, else the record URL. `source_version`: the record version, else its publication date. Both come from the member's `DOWNLOAD.json`.
+  - `path`: relative to `data/raw/`, POSIX, starting with the member id. `dup_paths`: the other files with the same bytes, sorted, or `[]`.
+  - `sha256`: 64 hex digits of the stored bytes. `phash`: 16 hex digits, 64-bit.
+  - `width`, `height` (int) and `format` (`jpeg`/`png`).
+  - `class_raw`: the source's label, verbatim. `class_km2` ∈ {`healthy`, `rust`, `anthracnose`, `unknown_als`, `unknown_wm`, `none`}.
+  - `boxes`: a list of `{x, y, w, h, class_raw}` in pixels, or null.
+  - `group_keys`: {`district`, `subcounty`, `date` (ISO), `region`, `session`, `variety`, `plant_age` (int), `phash_group`}. Each is null unless the source publishes it, except `phash_group`, which is always set.
+  - `split_group`: the unit the row was split with: its block for a trained-class row placed by `blocked:*`, otherwise its `phash_group` (held-out rows, unblocked rows, rows that fell back under US-3.2).
+  - `split` ∈ {`train`, `val`, `test`, `holdout_unknown`} and `split_rule` (FR-004).
+  - `licence` ∈ {`CC-BY-4.0`, `CC0-1.0`, `MIT`, `unknown`} and `attribution` (verbatim), both from `DOWNLOAD.json`.
+  - `notes`: a string or null.
+- **FR-004** The `split_rule` vocabulary is `blocked:<key>` (a `group_keys` name), `unblocked:random_by_phash_group`, `test_only` and `holdout_unknown`. Anything else fails validation with `bad_split_rule`.
+- **FR-005** The sidecar holds:
+  - `manifest`, `version`, `role`, `rule`, `seed`, `phash_threshold`;
+  - `class_map` (path, version, sha256) and `recipe_sha256`;
+  - `members` (per record: `files`, the files scanned apart from annotation files; `distinct`, their distinct sha256s; `shared_with`, the distinct sha256s shared with each other record);
+  - `counts` (`rows`, then per `class_raw`, `class_km2`, `split`, `split_rule`, and split × `class_km2`) and the achieved fractions;
+  - `splits` (blocked rules only: split → block → trained rows);
+  - `excluded` (`path`, `reason`) and `warnings` (`unblocked`, `partly_unblocked`, `mixed_class_phash_group`);
+  - `licence_source`, `allow_unknown_licence`, `manifest_sha256`, `built_at` and the builder (module, version, git sha).
+
+  The sidecar is rewritten only when something other than `built_at` and the builder has changed.
+- **FR-006** Duplicates:
+  - **Exact** duplicates share a `sha256`, across all members of a manifest. They get one row with `dup_paths`; if the copies disagree on the label, the image is excluded with `label_conflict`.
+  - **Near** duplicates: pHash is the DCT of the orientation-applied greyscale image at 32×32, 64 bits. Its connected components at Hamming ≤ `phash_threshold` (default 6, recorded) form the `phash_group`, whose id is the smallest `image_id` in the component.
+  - **Blocks** are the connected components of the trained-class rows under three links: same key value, same `phash_group`, and, for a row without the key, the key values that rows of any class (held-out ones included) carry on the same `date` (US-3.2). A block's id is `<key>:<values sorted, joined by +>`. Blocks and phash groups are atomic for splitting.
+  - Duplicates **across manifests** are reported by `overlap`, never merged.
+- **FR-007** The class map is `configs/class_map_v1.yaml`: per manifest, `class_raw` → KM2 class or `excluded`. It is additive only: changing an entry means `class_map_v2`. `unknown_*` rows are always `holdout_unknown` and `none` rows are always `test`.
+- **FR-008** Splits for trained-class rows target train 0.70, val 0.10 and test 0.20 of the rows of each trained class. Only whole groups move, and the seed is the recipe's `seed`. Among the assignments that put every trained class present into every split, the builder takes one close to the targets; if there is none, it fails with `class_missing_from_split`. The achieved fractions go to the sidecar. In `test_only` manifests every row is `test`; in `holdout_unknown` manifests every row is `holdout_unknown`.
+- **FR-009** Reasons are printed as `<reason>: …`, with the 1-based row numbers and the group id where there is one.
+  - **Validation**: `missing_file`, `sha256_mismatch`, `duplicate_image_id`, `rows_not_sorted`, `missing_field`, `bad_value`, `bad_split_rule`, `group_straddles_split`, `class_missing_from_split`, `unknown_in_train`, `unlabelled_in_train`, `licence_unknown`, `frozen_manifest_modified`.
+  - **Build**, which also exits non-zero: `unmapped_class`, `rule_not_applicable`, `class_missing_from_split`, `licence_unknown`, `frozen_manifest_modified`, and `sha256_mismatch` for a file that differs from its member's `SHA256SUMS`.
+  - **Exclusion**, recorded in `meta.json.excluded`: `not_an_image`, `decode_error`, `label_conflict`, `excluded_by_class_map`, `drawn_boxes`, `no_label`.
+- **FR-010** Licence gate: `licence = unknown` fails the build and validation unless the manifest was built with `--allow-unknown-licence`. `freeze` refuses it in every case.
+- **FR-011** The loader, used by 002–006, is `load_manifest(path, split, purpose)` with `purpose ∈ {train, select, evaluate, serve}`. It returns `.rows`, `.sha256` (of the file) and `.frozen` (listed in `FROZEN.jsonl` beside it).
+  - `test` and `holdout_unknown` are readable only for `evaluate` and `serve`; any other purpose raises `TestSplitAccessError`.
+  - A frozen manifest whose bytes changed raises `FrozenManifestModified`.
+- **FR-012** Crops manifests (US-6) are derived and never hand-edited. They record the margin, link to the parent, and inherit `group_keys`, `split` and `split_rule`.
+- **FR-013** No fields beyond what the source publishes. `group_keys` hold published values only. Derived values, such as the district of a healthy image, appear only in `split_group`. The manifest holds no GPS.
+- **FR-014** Building again with the same raw files, recipe, class map and builder version produces a byte-identical `.jsonl` and leaves the sidecar untouched. A frozen version is never overwritten (exit 3).
+
+### Datasets: labels, grouping keys, rules
+
+| Manifest ← members | Role | Rows from (under `data/raw/<member>/`) | `class_raw` → KM2 (`class_map_v1`) | `group_keys` the source publishes | `split_rule` |
+|---|---|---|---|---|---|
+| `ibean` ← ibean | test-only: an N2 target. Its within-dataset split serves the W2 slice, and those numbers are never quoted | `extracted/<split>/<class>/` | folder: `healthy`; `bean_rust` → rust; `angular_leaf_spot` → unknown_als | none (the source's own split stays visible in `path`, unused) | `unblocked:random_by_phash_group` |
+| `makerere` ← makerere | train and evaluate | `extracted/<archive>/<archive>/*.jpg`, with the XML beside each image | XML `class`: `ALS` → unknown_als, `Bean Rust` → rust; without XML: `healthy` (the folder) | XML: `district`, `subcounty`, `date` (`datetime`), `variety`, `plant_age` (`age`), and boxes. Healthy images: `date` only, from the file name (see Edge cases) | `blocked:district`; healthy images join through their date (US-3.2) |
+| `tanzania` ← tz155k, tz59k | train and evaluate | `extracted/<archive>/<class folder>/*.jpg` | folder without its chunk digits: `healthy`, `rust`, `anthra` → anthracnose | `date` (EXIF `DateTimeOriginal`). No region or session: the folders are flat class folders split into chunks, and the tz59k record states one region (Mbeya) | `blocked:date` |
+| `swm` ← swm | held-out unknown | `extracted/r-swm-dataset/r-swm-dataset/original-images/<split>/images/`, with the VOC XML in `…/pascal-voc/<split>/`. The `bbox/` renderings are excluded (`drawn_boxes`), and the SWM crops are `swm_crops` (US-6) | VOC object names, distinct, sorted, joined ` + `: anything with `White Mold` → unknown_wm; apothecia or sclerotia only → excluded | `date` and `session` (the `ds-<date>-<place>` prefix) from the file name | `holdout_unknown` |
+| `acre` ← acre (stretch) | test-only | to be decided with its recipe | → none | none | `test_only` |
 
 ### Key entities
 
-- **Manifest** — a frozen or draft list of rows for one dataset version, identified by its file sha256.
-- **Row** — one image: identity (sha256, image_id), provenance (dataset, record, licence, attribution), labels (class_raw, class_km2, boxes), structure (group, phash_group), assignment (split, split_rule).
-- **Group** — the atomic unit of splitting: a pHash component, or a blocking-key value (district, …) when a blocked rule is used.
-- **Class map** — versioned table from source labels to KM2 classes plus the two held-out unknowns and `none`.
-- **Freeze record** — `FROZEN.jsonl` line: manifest, sha256, timestamp, git sha.
+- **Manifest**: the rows of one manifest version, identified by its file sha256. It is a draft until frozen.
+- **Recipe**: how a manifest is built from its members: role, rule, keys, seed and threshold.
+- **Row**: one distinct image. It carries identity (`sha256`, `image_id`, `path`, `dup_paths`), provenance (record, licence, attribution), labels (`class_raw`, `class_km2`, boxes), structure (`group_keys`, `split_group`) and assignment (`split`, `split_rule`).
+- **Block**: the atomic unit of a blocked split. **Phash group**: the atomic unit of near-duplicates.
+- **Class map**: the versioned table from source labels to KM2 classes, the two held-out unknowns, `none` and `excluded`.
+- **Freeze record**: one `FROZEN.jsonl` line.
 
 ## Success criteria (measurable, technology-agnostic)
 
-- **SC-1** Manifests exist and validate (exit 0) for `ibean`, `makerere`, `tz155k` and `tz59k` (and `swm`) on the project machine; `tz3` and `acre` are either built or explicitly excluded in `meta.json`.
+- **SC-1** Manifests exist and validate (exit 0) for `ibean`, `makerere`, `tanzania` and `swm` on the project machine. `tz3` and `acre` are either built or recorded as not built, with the reason.
 - **SC-2** Building any manifest twice produces byte-identical files.
-- **SC-3** 100 % of rows carry `sha256`, `class_km2`, `split`, `split_rule`, `licence`, `attribution`; 0 rows with `licence = unknown` in any frozen manifest.
-- **SC-4** The Tanzanian overlap (`tz155k` ↔ `tz59k`, and `tz3` if built) is a number in the sidecars, not an assumption.
+- **SC-3** 100 % of rows carry `sha256`, `class_km2`, `split`, `split_rule`, `licence` and `attribution`, and no frozen manifest has a row with `licence = unknown`.
+- **SC-4** The Tanzanian overlap (tz155k ↔ tz59k, and tz3 if built) is a number in the `tanzania` sidecar, not an assumption.
 - **SC-5** Every downstream artefact of piece 4 (cache `meta.json`, head `run.json`, `n_table.jsonl` rows, `model_version`) references a manifest sha256 that appears in `FROZEN.jsonl`.
-- **SC-6** The frozen manifests for the W3 head runs are listed in `DECISIONS.md` with their hashes before the first head run's timestamp.
+- **SC-6** The frozen manifests for the W3 head runs are listed in `DECISIONS.md` with their hashes before the timestamp of the first head run.
 - **SC-7** The fixture build (US-1.1) runs in CI on CPU in under one minute.
+- **SC-8** Every file under the scanned folders is accounted for (US-1.4).
 
 ## Assumptions
 
-- Raw datasets are downloaded untouched into `data/raw/<dataset>/` with a `DOWNLOAD.json` (URL, date, archive sha256, licence text) — `make download` from the work plan.
-- Dataset facts (counts, classes, licences, metadata fields) come from the E1 audit and are re-checked against the records on download; the audit's counts are expectations for a sanity check, not requirements.
-- pHash is computed on the decoded image resized to 32×32 greyscale (the standard pHash); the threshold is a recorded parameter, not a constant in code.
-- Makerere per-image metadata (variety, plant age, district, sub-county, GPS, date `[C99]`) is complete enough to block by district; if not, US-3.3 fires and the rule falls back to `unblocked` with a warning (H6 E4 lead).
+- The raw datasets are downloaded and extracted as in W1 (`make download`, `make extract`). Each `data/raw/<member>/` has a `DOWNLOAD.json` (record, version, licence, attribution), an `extracted/` folder and a `SHA256SUMS`. iBean's `extracted/` predates `ms.data.extract` and is laid out as `<split>/<class>/` (data note).
+- Counts and fields come from the W1 data note. They are expectations for a sanity check, not requirements.
+- pHash is as described in FR-006. The threshold is a recorded parameter, not a constant in code.
 
-## Clarifications (to settle in `/clarify` before `/plan`)
+## Clarifications
 
-1. **Makerere licence** — CC BY (datasheet) or CC0 (mirror): read on the Dataverse record; until then `--allow-unknown-licence`.
-2. **Tanzania grouping** — do the Zenodo archives carry region/session/date in folder names or an index file? Decides `blocked:*` vs `unblocked` for `tz155k`/`tz59k`.
-3. **`tz3`** — build it only if US-2.3 shows images not in `tz155k`/`tz59k`; otherwise exclude with reason.
-4. **pHash threshold** — default 6 of 64 bits; confirm on the fixture duplicates (US-2.2) before freezing anything.
-5. **Blocking key for Makerere** — `district` alone, or `district+capture_date`? (`capture_date` spans April–May 2021 only.)
-6. **Crop margin** — 10 % of the box side (H8 §6.4); confirm against the Makerere box statistics once downloaded.
-7. **ACRE** — in scope as a stretch (test-only, `none`); decide at W2 end whether to build it.
+Items 1–7 keep the draft's numbers, because other files cite them; items 8–11 are new. Closed items were settled on 2026-09-19 against the data (the W1 note, plus EXIF and XML scans of every Tanzanian and Makerere image).
+
+1. **Makerere licence (closed)**: CC0-1.0, as the Dataverse record states (`DOWNLOAD.json`). The datasheet says CC BY (finding 10).
+2. **Tanzania grouping (closed)**: there is no region, session or index in the archives (flat class folders split into chunks), and the tz59k record states one region, Mbeya. Every image has EXIF `DateTimeOriginal` except one rust picture held by both records, so the rule is `blocked:date`, with that one row unblocked (US-3.2). Days: healthy 122, rust 48, anthracnose 30, over 2022-10 to 2024-09. GPS is present in 18–69 % of images by class and is not used in v1.
+3. **tz3 (open)**: build it only if a test of `RUST_6.zip` against tz155k shows new images.
+4. **pHash threshold (open)**: 6 of 64 bits by default. Confirm it on the fixture duplicates (US-2.3) before freezing anything.
+5. **Makerere blocking key (closed)**: `district` alone. A capture date holds one or two districts, so a date adds nothing inside a block, and sub-counties (1–11 per district) are too fine. Healthy images join through their capture date, which comes from the file name because their EXIF is unreliable (Edge cases). Bugiri and Mayuge share 25–26 Apr.
+6. **Crop margin (open)**: 10 % of the box side (H8 §6.4). Confirm it against the Makerere box statistics (US-6).
+7. **ACRE (open)**: a stretch goal (test-only, `none`); decide at the end of W2.
+8. **Tanzania is one manifest (closed)**: `tanzania`, over tz155k and tz59k, not one manifest per record. tz59k adds one image (finding 1), and N2 and N4 treat Tanzania as one source.
+9. **One row per distinct image (closed)**: copies go to `dup_paths` (finding 2), and an image held under two labels is excluded (finding 3).
+10. **iBean (closed)**: test-only in the protocol, with an unblocked within-dataset split for the W2 slice. Angular leaf spot is `unknown_als`.
+11. **SWM rows are the R-SWM originals (closed)**: the class map decides which labels are `unknown_wm`, and the 300-px crops become `swm_crops` (P2).
 
 ## Out of scope
 
-Annotation and any labels beyond the sources' own; image preprocessing and resizing (002); DVC mechanics (piece 3 — the manifest is what DVC tracks, this spec does not say how); feature extraction; any Polish or Saxa data; the KM2 test set (a future manifest under the same contract, when Polish imagery exists).
+Annotation, and any labels beyond the sources' own. Image preprocessing and resizing (002). DVC mechanics: piece 3 tracks the manifest with DVC, and this spec does not say how. Feature extraction. Any Polish or Saxa data. The KM2 test set: a future manifest under the same contract, once Polish imagery exists.

@@ -130,3 +130,54 @@ a CUDA matmul on `sm_120` runs. First compute-log row written:
     - Pinned Hub revisions (configs/backbones): dinov3_l16 `ea8dc2863c51be0a264bab82070e3e8836b02d51`, dinov2_l14_reg `e4c89a4e05589de9b3e188688a303d0f3c04d0f3`;
       `hub-check` is the command that re-verifies access and prints the current shas.
     Reversed by: a signed C5 (lifts research-only) or a licence change by Meta.
+
+## 2026-09-19 — W1 · spec 001 (manifests), clarified against the data
+
+The spec's Clarifications (`specs/001-manifests/spec.md`) closed on the downloaded data (the W1
+data note in `data/README.md`, plus EXIF and XML scans of every Tanzanian and Makerere image).
+Tests: `tests/test_manifests.py`, red until W2. A throwaway reference builder, never committed,
+passed them all (apart from US-1.1, which needs the fixture) to show they can be satisfied.
+
+14. **Tanzania is one manifest, `tanzania`, built from tz155k and tz59k**, not one per record.
+    tz59k sits inside tz155k (finding 1). Separate manifests would split the same pictures twice,
+    with nothing to keep a picture in the same split both times. Now the overlap is a number in
+    the sidecar (SC-4), and N2 and N4 treat Tanzania as one source anyway. Reversed by: a use for
+    tz59k on its own (none is planned).
+15. **One row per distinct image (sha256).** Copies go into `dup_paths`. An image filed under two
+    labels is excluded (`label_conflict`, finding 3). In the Tanzanian records, 28–38 % of the
+    files are extra copies (finding 2), so one row per file would weight rust about 2.5× in
+    training and cache the same features several times over.
+16. **Split rules.**
+    - Makerere: `blocked:district`. Healthy images have no XML, so each is placed by its capture
+      date, in the district(s) that day's annotated images name. Images of every class count,
+      including held-out angular leaf spot: 26 Apr has angular leaf spot only, and without it
+      that day's 870 healthy images would have no block. Bugiri and Mayuge share 25–26 Apr
+      and therefore form one block.
+    - Tanzania: `blocked:date`, from EXIF DateTimeOriginal, because the source records no region
+      or session. The one picture without EXIF falls back to its phash group, and its
+      `split_rule` says so.
+    - iBean: `unblocked:random_by_phash_group`. It is test-only in the protocol; its split serves
+      the W2 slice only.
+    - Targets are 70/10/20 of the rows of each class. Only whole groups move, and every trained
+      class must reach every split, or the build fails.
+
+    Reversed by finer metadata, for example GPS clusters of farms for Tanzania (present in
+    18–69 % of images, depending on class) in a v2.
+17. **Capture date: one source per dataset, the one that agrees with the acquisition.**
+    - Makerere: the XML `datetime`. For images without XML, the file name, read as Unix
+      milliseconds in UTC+03:00. It falls on the XML's day for 10,116 of 10,118 annotated
+      images, and on the trip days for every healthy image.
+    - Makerere's EXIF was rewritten after the trip. IFD0 DateTime reads 2021-08-07, and
+      DateTimeOriginal is missing in 361 healthy images and dated after the trip (2021-06-10,
+      2021-08-11) in 306.
+    - Tanzania: EXIF DateTimeOriginal. Every image has it apart from one picture held by both
+      records. The file names are upload times: they disagree with DateTimeOriginal for 55 % of
+      tz155k's healthy images.
+    - IFD0 DateTime, the file-change time, is never used.
+18. **SWM rows are the R-SWM originals.** These are frames, comparable with the ALS frames. A
+    picture is `unknown_wm` if and only if one of its boxes is White Mold. Pictures showing only
+    apothecia or sclerotia are `excluded` by the class map. The 300-px crops become `swm_crops`
+    (P2). Reversed by: N3 needing crop-level unknowns first.
+19. **Manifest recipes live in `configs/manifests/<manifest>.yaml`**, next to
+    `configs/class_map_v1.yaml`. The download configs in `configs/datasets/` stay one per record,
+    and `DatasetConfig` rejects keys it does not know.

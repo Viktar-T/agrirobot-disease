@@ -1,0 +1,13 @@
+# Manifest recipe - spec 001: data/manifests/ibean_v1.jsonl from data/raw/ibean/.
+# Test-only in the protocol: iBean is an N2 target (Tanzania -> iBean). Its within-dataset
+# split exists for the W2 vertical slice only, and numbers trained on it are never quoted.
+# No grouping metadata: the source's own train/validation/test folders stay visible in
+# `path` but are not used (they are not checked for near-duplicates).
+manifest: ibean
+version: 1
+members: [ibean]
+role: test_only
+rule: unblocked:random_by_phash_group
+group_keys: []
+seed: 0
+phash_threshold: 6

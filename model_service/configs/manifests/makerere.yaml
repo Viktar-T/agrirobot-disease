@@ -1,0 +1,20 @@
+# Manifest recipe - spec 001: data/manifests/makerere_v1.jsonl from data/raw/makerere/.
+# Blocked by district (Clarification 5). Angular leaf spot and rust images carry an XML
+# with district, sub-county, datetime, variety and age; healthy images carry none (W1 data
+# note, finding 5). A healthy image joins the block of the district(s) that the annotated
+# images of its capture day name, of any class: 26 Apr has angular leaf spot only, which
+# is held out but still records where the team was. 22-24 Apr map to Mubende, Hoima,
+# Kiboga; 25-26 Apr are shared by Bugiri and Mayuge, which therefore form one block. That district is used for the split only and is
+# never written into group_keys (FR-013). The day comes from the file name (Unix ms,
+# UTC+03:00), not from EXIF, which was rewritten after the trip: DateTimeOriginal is missing
+# in 361 healthy images and dated after the trip in 306 (W1 scan, 2026-09-19). All healthy
+# images come from the April trip (finding 6), so only the April blocks can carry healthy
+# into val and test.
+manifest: makerere
+version: 1
+members: [makerere]
+role: train_eval
+rule: blocked:district
+group_keys: [district, subcounty, date, variety, plant_age]
+seed: 0
+phash_threshold: 6

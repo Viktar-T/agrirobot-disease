@@ -1,0 +1,16 @@
+# Manifest recipe - spec 001: data/manifests/swm_v1.jsonl from data/raw/swm/.
+# Held-out unknown `unknown_wm`: never trained on. Rows are the R-SWM original pictures
+# (r-swm-dataset/original-images/<split>/images/), labelled from the Pascal VOC XML beside
+# them. Pictures showing only apothecia or sclerotia are excluded by the class map. Not
+# rows: the "-bboxes" renderings with the boxes drawn in, and the YOLO copies (W1 data
+# note, finding 7). The SWM 300-px crops become `swm_crops` under US-6 (P2).
+# date and session (the place prefix "ds-<date>-<place>") come from the file name and are
+# informational only.
+manifest: swm
+version: 1
+members: [swm]
+role: holdout_unknown
+rule: holdout_unknown
+group_keys: [date, session]
+seed: 0
+phash_threshold: 6
