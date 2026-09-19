@@ -244,3 +244,37 @@ is opt-in and was not run.
     - The CPU tests use a tiny random-init model of the real class
       (`Dinov2WithRegistersModel`, width 32, 4 registers, about 180 KB) saved to `tmp_path`,
       so the transformers code path runs with no download.
+
+## 2026-09-19 — W1 · interface hand-shake with piece 1 (their draft v0)
+
+Piece 4 adopts piece 1's W1 draft (`interface/README.md`,
+`interface/schema/v0/observation_frame.schema.json`), which is marked "not yet reviewed by
+P + E or the robotics side". The confirmation itself is still pending (M + P): if piece 1's
+review changes an answer, the entry below changes with it.
+
+28. **Service request = the `observation_frame` record + `request_id` + `options`.** Piece 1
+    shaped the record as `frame` + `metadata` precisely so that this holds (their choice 1).
+    - S4.6 validates the record against piece 1's schema (`contract_version = "v0"`,
+      `additionalProperties: false`), and against their validator library once it exists,
+      never against a copy of our own. A broken frame gives HTTP 422 with the validator's
+      reason.
+    - The `uri` forms (MCAP, file roots) are still open between pieces 1 and 2 (W3). S4.6
+      needs them to fetch the bytes.
+29. **Yaw in radians, in [-π, π]** (ROS REP 103; their choice 4; the schema enforces the
+    bounds). The H8 §6.2 example `"yaw": 91.0` is invalid under v0, so S4.6's examples and
+    tests use radians; the schema example uses 1.588.
+30. **`bbch_null_reason` ∈ {`not_recorded`, `not_applicable`, `unknown`}** (their choice 5).
+    It is required when `bbch` is null and not allowed otherwise.
+    - Piece 4's v0 model does not use `bbch`; the service carries `bbch` and
+      `bbch_null_reason` into its request log unchanged.
+    - Frames built from the open datasets have `bbch = null` with `not_recorded`.
+31. **`frame_uid` is still open on piece 1's side, and piece 4 supports the rename.** In ROS,
+    `frame_id` names a coordinate frame, and v0 has both `frame.frame_id` (the image) and
+    `metadata.pose.frame_id` (the TF frame). Until piece 1 answers, `frame.frame_id` is the
+    image id. S4.6 reads it in one place and echoes it in the response, so a rename in v0.1
+    (W10) is a one-line change there.
+32. **The frame's `sha256` is piece 4's content hash.** Piece 1 defines it as the hash of the
+    image bytes exactly as stored at `uri` (their choice 10), the same definition as spec 001's
+    `sha256` and spec 002's `sha256[N]`. S4.6's cached-hash path looks it up in the caches
+    after recomputing it from the bytes it fetches, so a wrong hash in a request cannot select
+    another image's features.
