@@ -799,3 +799,62 @@ so `test_heads.py` (26 tests) and `test_n_table.py` (46) are green, with the res
 
     These validation numbers drive early stopping. They are not N1, which reads the test
     splits (the next task).
+
+## 2026-09-19 — W3 · N1 at 224: three heads, five seeds (ahead of schedule)
+
+The work plan's "N1", scored by `make eval` (spec 005 US-3) on the 60 runs of 70. The table
+gained 254 rows: 210 per seed and 42 aggregates, all quotable, plus the two per-class rows of
+the W2 slice's run, which is not quotable. The rows are in `results/n_table.jsonl` and
+`n_table.md`.
+
+71. **N1 follows the frozen manifests' split rules.**
+    - Makerere is `blocked:district`: its test districts are Hoima, Lyantonde and Ntungamo
+      (44).
+    - `tanzania_v1` is `blocked:date`, with 38 capture dates in its test split (49). The task
+      line said "region/session or `unblocked`". It was written before the data showed that
+      Tanzania has neither region nor session (spec 001 Clarification 2), and it now says
+      "by capture date".
+72. **What N1 measured at 224**: the mean over seeds 0–4 with its 95 % t interval.
+
+    | set | backbone | head | macro-F1 | recall healthy | recall rust | recall anthracnose |
+    |---|---|---|---|---|---|---|
+    | Makerere | `dinov2_l14_reg` | linear | 0.990 (0.989–0.991) | 0.995 (0.994–0.996) | 0.985 (0.983–0.987) | — |
+    | | | proto | 0.993 (0.991–0.995) | 0.994 (0.990–0.997) | 0.993 (0.988–0.998) | — |
+    | | | mix | 0.994 (0.991–0.996) | 0.996 (0.994–0.998) | 0.991 (0.987–0.995) | — |
+    | | `dinov3_l16` | linear | 0.988 (0.987–0.989) | 0.993 (0.991–0.994) | 0.983 (0.980–0.987) | — |
+    | | | proto | 0.991 (0.990–0.992) | 0.988 (0.985–0.992) | 0.995 (0.993–0.997) | — |
+    | | | mix | 0.992 (0.991–0.993) | 0.990 (0.988–0.991) | 0.994 (0.991–0.996) | — |
+    | Tanzania | `dinov2_l14_reg` | linear | 0.994 (0.994–0.995) | 1.000 (1.000–1.000) | 0.977 (0.976–0.977) | 0.994 (0.994–0.994) |
+    | | | proto | 0.996 (0.995–0.996) | 1.000 (1.000–1.000) | 0.983 (0.981–0.985) | 0.994 (0.994–0.995) |
+    | | | mix | 0.995 (0.995–0.996) | 1.000 (1.000–1.000) | 0.981 (0.979–0.983) | 0.994 (0.994–0.994) |
+    | | `dinov3_l16` | linear | 0.992 (0.990–0.993) | 0.998 (0.997–0.999) | 0.985 (0.985–0.986) | 0.992 (0.992–0.992) |
+    | | | proto | 0.996 (0.995–0.996) | 1.000 (1.000–1.000) | 0.983 (0.980–0.987) | 0.995 (0.994–0.995) |
+    | | | mix | 0.996 (0.996–0.996) | 1.000 (1.000–1.000) | 0.985 (0.984–0.987) | 0.994 (0.993–0.995) |
+
+    - Every head scores at least 0.988 macro-F1 on both sets. proto and mix are above linear
+      everywhere, by 0.001–0.005. That fits the linear head stopping at the epoch cap on
+      Makerere (69). The two backbones are within 0.004 of each other.
+    - The test rows are 1,050 healthy and 965 rust on Makerere, and 19,410 healthy, 1,649
+      rust and 1,309 anthracnose on Tanzania. "1.000" for Tanzania's healthy rows is 0.9999:
+      about 2 misses in 19,410.
+    - **The rarest class is not the weakest.** Tanzania's rarest class, anthracnose (4,751
+      train rows), is recalled at 0.992–0.995. Its rust (5,770 train rows) is the weakest
+      class of the table, at 0.977–0.985.
+    - On Makerere the two classes are nearly the same size. Rust is the weaker one for every
+      DINOv2 head and for DINOv3's linear head, and healthy for DINOv3's proto and mix.
+    - The t interval is not clipped. A recall of 0.9999 with a small spread can show an upper
+      bound of 1.0001 in the `.jsonl` (DINOv3's proto and mix on Tanzania's healthy rows).
+73. **How to read N1: high, and not yet evidence of skill across sites.**
+    - **Makerere.** Its test split carries the class ↔ trip confound (44). All 1,050 healthy
+      test rows are Hoima's (the April trip), and 959 of the 965 rust rows are Lyantonde's and
+      Ntungamo's (the May trip). N4 showed that the features carry the capture session (56).
+    - The 6 rust rows from Hoima were taken on the healthy rows' trip. The DINOv3 heads
+      recall all 6. The DINOv2 heads recall 4 of 6 (linear), 5 on average (mix) and 5.4 on
+      average (proto). That is weak evidence, on 6 rows, that the heads see rust and not
+      only the trip.
+    - **Tanzania.** Blocking by capture date keeps each day's copies on one side. A farm
+      revisited on the next day can still sit on the other side (spec 001 edge cases).
+    - So N1 bounds what the heads can do within a set. N2, across sets, tests whether the
+      features carry the disease rather than the site, and the guard-rail check compares
+      the two.
+    - Abstention rates come with S4.4 (W4).
