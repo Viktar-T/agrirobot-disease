@@ -375,3 +375,75 @@ unblocked (H8 6.3).
     - N1: macro-F1 0.977 on 172 test rows, `unblocked:random_by_phash_group`, not quotable.
     - `make serve`, then `POST /v1/predict` with a cached test image: HTTP 200 in 1.8 ms,
       from the cache. A broken frame got 422 with three validator reasons.
+
+## 2026-09-19 — W2 · Makerere: the first blocked split, and its crops (ahead of schedule)
+
+The work plan's "Wed — Makerere". The manifest is built and checked but not frozen yet:
+freezing comes with the Tanzania task, before any head (SC-6).
+
+42. **Readers for Makerere, Tanzania and SWM; the S4.1 tests are green (36 of 36).** They
+    follow the acceptance tests and the W1 scans.
+    - Makerere: the XML gives class, district, sub-county, datetime (the date), variety, age
+      (`plant_age`) and boxes. A healthy image has its folder and its file-name date.
+    - Tanzania: the class folder without its chunk digits, and EXIF DateTimeOriginal, read
+      while the image is decoded.
+    - SWM: the R-SWM originals and their VOC files.
+
+    The Tanzania and SWM manifests are built on the real data with the next task.
+43. **The split search is exact for blocked splits.** FR-008 asks for an assignment close to
+    the targets. The first version, greedy, cannot swap whole blocks, and put Makerere's
+    healthy at 0.63/0.20/0.17 instead of 0.63/0.17/0.20.
+    - Up to 12 groups, every assignment is scored and the closest is taken. Makerere's 11
+      blocks give 3^11 = 177,147 assignments.
+    - Up to 500 groups (Tanzania's dates), moves and pairwise swaps improve the greedy
+      assignment.
+    - Beyond that the greedy one stands; iBean has 863 fine-grained groups.
+    - The greedy keeps the first version's float arithmetic, so `ibean_v1` (sha256
+      `423a1666…6060`, the slice's) and the fixture are unchanged.
+44. **`makerere_v1.jsonl`: 15,402 rows** (healthy 5,284, rust 5,020, ALS 5,098 held out).
+    Nothing is excluded, there is one near-duplicate pair and no exact copies. sha256
+    `8d9d1f06…0542`.
+    - Blocks: 11 from 12 districts, with Bugiri and Mayuge merged. Train: Bugiri+Mayuge,
+      Kayunga, Kiboga, Mbale, Serere, Sironko. Val: Mubende, Pallisa. Test: Hoima,
+      Lyantonde, Ntungamo. Shares: healthy 0.63/0.17/0.20, rust 0.70/0.11/0.19. Healthy val
+      cannot go below 0.17, because its smallest block holds 910 of 5,284.
+    - Completeness (H6 E4, for P): district, date, variety and plant age are on every rust and
+      ALS row; sub-county is missing on 30 rows, all in Kiboga. Healthy rows carry only the
+      date (from the file name). Their district is inferred through the day, for the split
+      only (FR-013).
+    - The class ↔ trip confound is structural. Healthy exists only in the four April blocks,
+      so the test split's healthy rows are all Hoima's (1,050), and nearly all its rust rows
+      are from the May trip (Lyantonde and Ntungamo; Hoima has 6). N1 on Makerere has to say
+      so, and N4 will see it.
+    - For N1, N4 and the class map: 25 % of the ALS and 11 % of the rust images are flagged
+      `hasOtherSymptoms`, so co-infection is possible. Resolutions differ by class:
+      1024×498 is common among healthy images and rare among rust.
+45. **Makerere's boxes are not in one frame on EXIF-turned images.** 3,047 of the 10,101
+    annotated images carry an EXIF rotation. Their XML `size` is always the stored size, yet
+    the boxes follow either frame.
+    - Of the 624 turned images whose width and height swap: 262 images fit the upright frame
+      only, 50 the stored frame only, 212 mix the two box by box, 98 fit both and 2 neither.
+      A visual check of three agrees: in the mixed one, the boxes sit on infected leaves in
+      two different frames. An app that redraws the image when the phone turns would do
+      this.
+    - A colour test cannot decide the square ones: on unturned images it picks a 180° turn
+      twice as often as the truth.
+    - So crops take each box in the one frame whose bounds hold it. A box that both frames
+      hold, or neither, is excluded as `box_frame_unknown` (US-6.4). Unturned images (7,054)
+      are unaffected.
+    - Recovering the 9,618 unknown boxes needs a content test that passes the unturned
+      control, for example a leaf-vs-background probe on the features of the known-frame
+      crops. That would be crops v2, if crop-level numbers need them.
+46. **`makerere_crops_v1.jsonl` (US-6): 27,019 crops** (rust 13,816, ALS 13,203) of 36,640
+    boxes. sha256 `efab8bb0…52ea2`.
+    - Excluded: 9,618 boxes as `box_frame_unknown`. Clipped at the image edge: 7,199.
+      Cut in the stored pixels: 26,013; in the upright frame: 1,006.
+    - Files: `data/derived/makerere_crops/`, 2.0 GB, JPEG quality 95 without chroma
+      subsampling; 262 s. The rust crops follow their parents' splits: train 9,378, val
+      1,783, test 2,655.
+    - There are no healthy crops, because healthy images have no boxes. A crop-level
+      healthy/rust number (H8 N2: "frame-level and box-crop-level") needs healthy crops from
+      elsewhere: a question for N2 in W3.
+    - The crops live in `data/derived/`, not `data/raw/`, which stays as downloaded. The
+      sidecar names that root, and `validate` and the cache read the files there. Crops have
+      no recipe file: `crops` derives them from the parent manifest and `--margin`.

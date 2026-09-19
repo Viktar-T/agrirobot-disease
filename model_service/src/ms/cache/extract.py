@@ -2,7 +2,7 @@
 
     python -m ms.cache.extract --backbone dinov2_l14_reg --res 224 --dataset ibean
     python -m ms.cache.extract --backbone dinov2_l14_reg --res 224 --manifest <file.jsonl>
-        [--raw-root data/raw] [--cache-root data/cache]
+        [--raw-root <the manifest's root>] [--cache-root data/cache]
         [--config-dir model_service/configs/backbones]
         [--device cuda|cpu] [--dtype float16|float32] [--batch-size N] [--shard-size N]
         [--max-shards K] [--workers N] [--compute-log model_service/results/compute_log.jsonl]
@@ -54,7 +54,7 @@ from ms.cache import (
     load_cache,
     preprocess,
 )
-from ms.data.manifests import RAW_ROOT, git_sha, load_manifest, manifest_path, repo_relative
+from ms.data.manifests import file_root, git_sha, load_manifest, manifest_path, repo_relative
 
 #: spec 002 Clarification 8: the working default, to confirm with the W2 timing
 SHARD_SIZE = 1024
@@ -349,7 +349,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     which = p.add_mutually_exclusive_group(required=True)
     which.add_argument("--dataset", help="manifest id: data/manifests/<id>_v<N>.jsonl")
     which.add_argument("--manifest", type=Path, help="a manifest file")
-    p.add_argument("--raw-root", type=Path, default=RAW_ROOT)
+    p.add_argument("--raw-root", type=Path, default=None, help="default: the manifest's root")
     p.add_argument("--cache-root", type=Path, default=CACHE_ROOT)
     p.add_argument("--config-dir", type=Path, default=BACKBONE_CONFIGS)
     p.add_argument("--device", default=None, help="cuda when present, else cpu")
@@ -404,12 +404,14 @@ def run(args: argparse.Namespace, started: float) -> int:
         )
     batch_size = int(args.batch_size or cfg["batch_size"])
     shard_size = int(args.shard_size or SHARD_SIZE)
-    raw_root, cache_root = Path(args.raw_root), Path(args.cache_root)
+    cache_root = Path(args.cache_root)
 
     manifest_file = Path(args.manifest) if args.manifest else manifest_path(args.dataset)
     if not manifest_file.exists():
         raise InputError("missing_file", f"no manifest {manifest_file} (run make manifests)")
     manifest = load_manifest(manifest_file, None, "extract")
+    # data/raw, or the root the sidecar names (crops: data/derived)
+    raw_root = Path(args.raw_root) if args.raw_root else file_root(manifest_file)
     rows = manifest.rows
     if not rows:
         raise InputError("bad_value", f"{manifest_file.name} has no rows")

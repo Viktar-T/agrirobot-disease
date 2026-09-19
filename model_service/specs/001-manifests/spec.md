@@ -1,6 +1,6 @@
 # Feature specification: 001 — Dataset manifests
 
-**Branch**: `001-manifests` · **Created**: 2026-09-17 · **Clarified**: 2026-09-19, against the data on disk · **Status**: Implemented for iBean on 2026-09-19 (`ms.data.manifests`, the W2 slice): 26 of the 36 acceptance tests in `model_service/tests/test_manifests.py` green; the readers for Makerere, Tanzania and SWM, and blocked splits, come with their W2 tasks
+**Branch**: `001-manifests` · **Created**: 2026-09-17 · **Clarified**: 2026-09-19, against the data on disk · **Status**: Implemented on 2026-09-19 (`ms.data.manifests`): the 36 acceptance tests in `model_service/tests/test_manifests.py` green; US-6 planned on 2026-09-19 against the Makerere boxes, its tests in `model_service/tests/test_crops.py` green
 **Input**: H8 §6.3 (data preparation), `docs/piece4-work-plan.md` S4.1, the E1 dataset audit (`50_E1_audit-of-existing-datasets.md`), the W1 data note (`data/README.md`, findings 1–10). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
 
 ## Why
@@ -64,11 +64,13 @@ As the ML role, I declare a manifest version frozen before the first head is tra
 4. **Given** a frozen version, **when** a build would change it, **then** the build exits 3 and leaves the file untouched. The change becomes `<manifest>_v2.jsonl`, and v1 stays as it was, frozen.
 5. **Given** a manifest with `licence = unknown`, **then** it can only be built with `--allow-unknown-licence`, which the sidecar records, and `freeze` refuses it with `licence_unknown` (exit 2).
 
-### US-6: Crops manifests (P2; tests are written with its plan in W2)
+### US-6: Crops manifests (P2; planned on 2026-09-19 against the Makerere boxes, tests in `tests/test_crops.py`)
 
-1. **Given** `makerere_v1.jsonl` with `boxes`, **when** `crops makerere_v1.jsonl --margin 0.10` runs, **then** `makerere_crops_v1.jsonl` has one row per box. Each row carries `parent_image_id`, `box_index` and its own `sha256` (of the written crop). It inherits the parent's `group_keys`, `split` and `split_rule` unchanged, and takes `class_km2` from the box label.
+1. **Given** `makerere_v1.jsonl` with `boxes`, **when** `crops makerere_v1.jsonl --margin 0.10` runs, **then** `makerere_crops_v1.jsonl` has one row per box. Each row carries `parent_image_id`, `box_index`, `crop` (the rectangle cut: `x`, `y`, `w`, `h` and its `frame`) and its own `sha256` (of the written crop). It inherits the parent's `group_keys`, `split_group`, `split` and `split_rule` unchanged, and takes `class_km2` from the box label.
 2. **Given** a crops manifest, **when** it is validated, **then** every `parent_image_id` exists in the parent manifest, and no parent's crops straddle splits.
-3. `swm_crops` holds the source's 300-px SWM crops, each linked to its R-SWM original by file name.
+3. `swm_crops` holds the source's 300-px SWM crops, each linked to its R-SWM original by file name. (Not built yet.)
+4. **Given** a parent that its EXIF orientation turns, **then** each box is cut in the frame that holds it: the stored pixels, or the upright image. Makerere's annotations use either, image by image and even box by box (the W2 scan of its 624 turned images whose width and height swap). A crop cut from the stored pixels is then turned upright, as whole frames are. A box that both frames hold, or neither, gets no row: it is in `meta.json.excluded` as `box_frame_unknown`. A parent that is not turned has one frame.
+5. **Given** a box that reaches past the image, **then** its crop is clipped to the image. A box with nothing inside the image gets no row (`box_outside_image`).
 
 ### Edge cases
 
@@ -122,16 +124,20 @@ As the ML role, I declare a manifest version frozen before the first head is tra
   - **Blocks** are the connected components of the trained-class rows under three links: same key value, same `phash_group`, and, for a row without the key, the key values that rows of any class (held-out ones included) carry on the same `date` (US-3.2). A block's id is `<key>:<values sorted, joined by +>`. Blocks and phash groups are atomic for splitting.
   - Duplicates **across manifests** are reported by `overlap`, never merged.
 - **FR-007** The class map is `configs/class_map_v1.yaml`: per manifest, `class_raw` → KM2 class or `excluded`. It is additive only: changing an entry means `class_map_v2`. `unknown_*` rows are always `holdout_unknown` and `none` rows are always `test`.
-- **FR-008** Splits for trained-class rows target train 0.70, val 0.10 and test 0.20 of the rows of each trained class. Only whole groups move, and the seed is the recipe's `seed`. Among the assignments that put every trained class present into every split, the builder takes one close to the targets; if there is none, it fails with `class_missing_from_split`. The achieved fractions go to the sidecar. In `test_only` manifests every row is `test`; in `holdout_unknown` manifests every row is `holdout_unknown`.
+- **FR-008** Splits for trained-class rows target train 0.70, val 0.10 and test 0.20 of the rows of each trained class. Only whole groups move, and the seed is the recipe's `seed`. Among the assignments that put every trained class present into every split, the builder takes one close to the targets (by the sum over splits and classes of the squared gap between achieved and target shares): with up to 12 groups (a blocked split) it scores every assignment and takes the closest, and beyond that it improves a seeded greedy one by moves and swaps. If there is none, it fails with `class_missing_from_split`. The achieved fractions go to the sidecar. In `test_only` manifests every row is `test`; in `holdout_unknown` manifests every row is `holdout_unknown`.
 - **FR-009** Reasons are printed as `<reason>: …`, with the 1-based row numbers and the group id where there is one.
-  - **Validation**: `missing_file`, `sha256_mismatch`, `duplicate_image_id`, `rows_not_sorted`, `missing_field`, `bad_value`, `bad_split_rule`, `group_straddles_split`, `class_missing_from_split`, `unknown_in_train`, `unlabelled_in_train`, `licence_unknown`, `frozen_manifest_modified`.
+  - **Validation**: `missing_file`, `sha256_mismatch`, `duplicate_image_id`, `rows_not_sorted`, `missing_field`, `bad_value`, `bad_split_rule`, `group_straddles_split`, `class_missing_from_split`, `unknown_in_train`, `unlabelled_in_train`, `licence_unknown`, `frozen_manifest_modified`; for crops manifests also `parent_missing`.
   - **Build**, which also exits non-zero: `unmapped_class`, `rule_not_applicable`, `class_missing_from_split`, `licence_unknown`, `frozen_manifest_modified`, and `sha256_mismatch` for a file that differs from its member's `SHA256SUMS`.
-  - **Exclusion**, recorded in `meta.json.excluded`: `not_an_image`, `decode_error`, `label_conflict`, `excluded_by_class_map`, `drawn_boxes`, `no_label`.
+  - **Exclusion**, recorded in `meta.json.excluded`: `not_an_image`, `decode_error`, `label_conflict`, `excluded_by_class_map`, `drawn_boxes`, `no_label`; for crops, `box_frame_unknown` and `box_outside_image`, each named `<parent path>#box<index>`.
 - **FR-010** Licence gate: `licence = unknown` fails the build and validation unless the manifest was built with `--allow-unknown-licence`. `freeze` refuses it in every case.
 - **FR-011** The loader, used by 002–006, is `load_manifest(path, split, purpose)` with `purpose ∈ {train, select, evaluate, serve, extract}`. `extract` is feature extraction (002): it reads every split and uses no labels. The loader returns `.rows`, `.sha256` (of the file) and `.frozen` (listed in `FROZEN.jsonl` beside it).
   - `test` and `holdout_unknown` are readable only for `evaluate`, `serve` and `extract`; any other purpose raises `TestSplitAccessError`.
   - A frozen manifest whose bytes changed raises `FrozenManifestModified`.
-- **FR-012** Crops manifests (US-6) are derived and never hand-edited. They record the margin, link to the parent, and inherit `group_keys`, `split` and `split_rule`.
+- **FR-012** Crops manifests (US-6) are derived and never hand-edited: `crops <parent.jsonl> [--margin 0.10] [--out <dir>] [--crop-root data/derived]` writes `<manifest>_crops_v<N>.jsonl` beside its parent, where N is the parent's version.
+  - The margin is a share of the box side, on each side, taken outward to whole pixels in exact decimal arithmetic.
+  - The crops are JPEG files (quality 95, no chroma subsampling) in `data/derived/<manifest>_crops/`, named `<parent_image_id>_b<box_index>.jpg`. `data/raw/` stays as downloaded. `path` is relative to that root, which the sidecar names as `root`, so `validate` and the cache (002) find the files there.
+  - A row has FR-003's fields, then `parent_image_id`, `box_index` and `crop`. It inherits `group_keys`, `split_group`, `split` and `split_rule`, except that a crop whose label maps to a held-out unknown is `holdout_unknown` whatever its parent.
+  - The sidecar records `kind: crops`, the margin, the encoding, the frame rule, the parent manifest and its sha256, and per-reason counts of the boxes without a row. A rebuild with the same inputs rewrites no file, and a frozen crops manifest is never changed (exit 3).
 - **FR-013** No fields beyond what the source publishes. `group_keys` hold published values only. Derived values, such as the district of a healthy image, appear only in `split_group`. The manifest holds no GPS.
 - **FR-014** Building again with the same raw files, recipe, class map and builder version produces a byte-identical `.jsonl` and leaves the sidecar untouched. A frozen version is never overwritten (exit 3).
 
@@ -180,7 +186,7 @@ Items 1–7 keep the draft's numbers, because other files cite them; items 8–1
 3. **tz3 (open)**: build it only if a test of `RUST_6.zip` against tz155k shows new images.
 4. **pHash threshold (open)**: 6 of 64 bits by default. Confirm it on the fixture duplicates (US-2.3) before freezing anything.
 5. **Makerere blocking key (closed)**: `district` alone. A capture date holds one or two districts, so a date adds nothing inside a block, and sub-counties (1–11 per district) are too fine. Healthy images join through their capture date, which comes from the file name because their EXIF is unreliable (Edge cases). Bugiri and Mayuge share 25–26 Apr.
-6. **Crop margin (open)**: 10 % of the box side (H8 §6.4). Confirm it against the Makerere box statistics (US-6).
+6. **Crop margin (closed on 2026-09-19)**: 10 % of the box side on each side (H8 §6.4). Makerere has 36,640 boxes on 10,101 images, whole infected leaves more than lesions: short side median 250 px, 5th percentile 70 px, minimum 14 px. A 10 % margin keeps a leaf's edge in the crop without taking in its neighbours.
 7. **ACRE (open)**: a stretch goal (test-only, `none`); decide at the end of W2.
 8. **Tanzania is one manifest (closed)**: `tanzania`, over tz155k and tz59k, not one manifest per record. tz59k adds one image (finding 1), and N2 and N4 treat Tanzania as one source.
 9. **One row per distinct image (closed)**: copies go to `dup_paths` (finding 2), and an image held under two labels is excluded (finding 3).
