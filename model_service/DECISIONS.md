@@ -205,3 +205,42 @@ passed them all (apart from US-1.1, which needs the fixture) to show they can be
       manifest could not be checked against the builder.
     - **The loader gains `purpose = extract`** (FR-011). Feature extraction (spec 002) has to
       read every split, test and held-out included, and it uses no labels.
+
+## 2026-09-19 — W1 · spec 002 (feature cache)
+
+`specs/002-cache/spec.md`; tests `tests/test_cache.py`, red until W2. A throwaway reference
+extractor, never committed, passed all of them to show they can be satisfied. The golden test
+is opt-in and was not run.
+
+22. **The key is part of the cache path**: `data/cache/<backbone_id>/<res>/<cache_key>/
+    <manifest>_v<N>.npz` with its `.meta.json`. The plan's layout
+    (`data/cache/<backbone_id>/<res>/<dataset>.npz`) would overwrite a cache whenever the
+    weights, preprocessing or dtype change. With the key in the path, both caches stay, as the
+    fp16/fp32 comparison of 11 needs.
+23. **`cache_key` is the first 16 hex digits of sha256(`json.dumps([backbone_id,
+    weights_sha256, resolution, preprocess_string, compute_dtype])`)**. These are the four
+    fields of the plan plus `compute_dtype` (11). Library versions, device, batch size and
+    shard size stay out of the key (12) and go to the sidecar.
+24. **`weights_sha256` is the sha256 of the weight file the model is loaded from**, not a Hub
+    revision: a corrupted or replaced download changes the key. At the pinned revisions both
+    backbones ship a single `model.safetensors` of about 1.2 GB.
+25. **`meanpatch` is the mean of the patch tokens only.** Both backbones carry 4 register
+    tokens (their `config.json` at the pins), so the last hidden state is `[CLS, 4 registers,
+    (res/patch)² patches]`. The register tokens are not image regions, so they are left out;
+    any other token count stops the run. `cls` is `last_hidden_state[:, 0]`, after the final
+    norm.
+26. **Preprocessing is the string, and the string is pinned.**
+    - The EXIF orientation is applied first, then the image is converted to RGB.
+    - `resize_short` resizes the shorter side, bicubic with antialias; `center_crop` follows;
+      `norm=imagenet` divides by 255 and applies the ImageNet mean and std.
+    - A changed meaning needs a new token. One `preprocess()` serves both the cache and the
+      service (006).
+    - `float16` means CUDA autocast over float32 weights; on CPU only `float32` runs.
+27. **What the cache records, and how it is tested.**
+    - `sha256[N]` is stored next to `image_id[N]`, for 006's cached-hash path.
+    - Every extraction run writes one compute-log row with a `cache` object, an extension of
+      the row like `env` in 8.
+    - Runs resume from shards; `--max-shards K` stops a run on purpose.
+    - The CPU tests use a tiny random-init model of the real class
+      (`Dinov2WithRegistersModel`, width 32, 4 registers, about 180 KB) saved to `tmp_path`,
+      so the transformers code path runs with no download.
