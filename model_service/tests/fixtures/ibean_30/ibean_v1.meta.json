@@ -1,0 +1,89 @@
+{
+  "meta_json_version": 1,
+  "manifest": "ibean",
+  "version": 1,
+  "role": "test_only",
+  "rule": "unblocked:random_by_phash_group",
+  "seed": 0,
+  "phash_threshold": 6,
+  "class_map": {
+    "path": "model_service/configs/class_map_v1.yaml",
+    "version": 1,
+    "sha256": "0af5627551004c08dc3ff5a9e7b3efda23e67e032fc08291d390b3f22bc8cea8"
+  },
+  "recipe_sha256": "b5fcb606e72942795df8aa52405e192cc2292056b81650312349a69827288498",
+  "members": {
+    "ibean": {
+      "files": 30,
+      "distinct": 30,
+      "shared_with": {}
+    }
+  },
+  "counts": {
+    "rows": 30,
+    "class_raw": {
+      "angular_leaf_spot": 10,
+      "bean_rust": 10,
+      "healthy": 10
+    },
+    "class_km2": {
+      "healthy": 10,
+      "rust": 10,
+      "unknown_als": 10
+    },
+    "split": {
+      "holdout_unknown": 10,
+      "test": 4,
+      "train": 14,
+      "val": 2
+    },
+    "split_rule": {
+      "holdout_unknown": 10,
+      "unblocked:random_by_phash_group": 20
+    },
+    "split_x_class_km2": {
+      "holdout_unknown": {
+        "unknown_als": 10
+      },
+      "test": {
+        "healthy": 2,
+        "rust": 2
+      },
+      "train": {
+        "healthy": 7,
+        "rust": 7
+      },
+      "val": {
+        "healthy": 1,
+        "rust": 1
+      }
+    }
+  },
+  "fractions": {
+    "train": {
+      "healthy": 0.7,
+      "rust": 0.7
+    },
+    "val": {
+      "healthy": 0.1,
+      "rust": 0.1
+    },
+    "test": {
+      "healthy": 0.2,
+      "rust": 0.2
+    }
+  },
+  "splits": null,
+  "excluded": [],
+  "warnings": [
+    "unblocked"
+  ],
+  "licence_source": "ibean/DOWNLOAD.json",
+  "allow_unknown_licence": false,
+  "manifest_sha256": "0c5b57f2ae27a9ab925a1e8ef4d722c0986b1868c4f5fc430fe8fc1329e63f1c",
+  "built_at": "2026-09-19T09:59:30Z",
+  "builder": {
+    "module": "model_service/tests/fixtures/make_ibean_30.py",
+    "git_sha": "61a47d9"
+  }
+}

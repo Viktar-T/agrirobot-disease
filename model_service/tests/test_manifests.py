@@ -8,8 +8,9 @@ are green from the start.
 No real data. Each test lays out a small raw tree in tmp_path the way data/raw/<member>/
 looks on the project machine (W1 data note: folder layouts, Makerere's XML, EXIF dates),
 with tiny generated JPEGs, and builds it with the real recipes (configs/manifests/) and
-the real class map (configs/class_map_v1.yaml). Only US-1.1 reads a committed fixture,
-tests/fixtures/ibean_30/ (the W1 "Fixture" task).
+the real class map (configs/class_map_v1.yaml). Only US-1.1 reads the committed fixture
+tests/fixtures/ibean_30/ (the W1 "Fixture" task): it builds the fixture, and checks the
+fixture's own manifest (ibean_v1.jsonl) against that build.
 """
 
 from __future__ import annotations
@@ -554,15 +555,6 @@ def test_each_recipe_names_its_members_role_rule_and_keys():
 
 
 def test_us1_1_the_ibean_fixture_builds_into_30_rows(tmp_path, capsys):
-    if (
-        not (FIXTURE / "LICENSE-MIT").is_file()
-        or not (FIXTURE / "ibean" / "DOWNLOAD.json").is_file()
-    ):
-        pytest.fail(
-            "tests/fixtures/ibean_30/ does not exist yet (W1 task 'Fixture': LICENSE-MIT, "
-            "ibean/DOWNLOAD.json, ibean/extracted/<split>/<class>/, 10 images per class)",
-            pytrace=False,
-        )
     manifest = built(capsys, FIXTURE, tmp_path, "ibean")
     rs = rows(manifest)
     assert len(rs) == 30
@@ -578,6 +570,20 @@ def test_us1_1_the_ibean_fixture_builds_into_30_rows(tmp_path, capsys):
     assert m["counts"]["rows"] == 30 and m["role"] == "test_only"
     assert m["counts"]["class_km2"] == {"healthy": 10, "rust": 10, "unknown_als": 10}
     assert_valid(capsys, manifest, FIXTURE)
+
+
+def test_us1_1_the_committed_fixture_manifest_is_what_the_builder_writes(tmp_path, capsys):
+    """tests/fixtures/make_ibean_30.py writes ibean_v1.jsonl until the builder exists (W2).
+    From then on, a build must give the same rows. Only `split` may differ: it is the
+    builder's own seeded draw (FR-008). Every other field is content (FR-003, FR-006)."""
+    committed = FIXTURE / "ibean_v1.jsonl"
+    assert_valid(capsys, committed, FIXTURE)
+    fresh = {r["image_id"]: r for r in rows(built(capsys, FIXTURE, tmp_path, "ibean"))}
+    ours = {r["image_id"]: r for r in rows(committed)}
+    assert fresh.keys() == ours.keys()
+    for image_id, row in ours.items():
+        without_split = {k: v for k, v in row.items() if k != "split"}
+        assert without_split == {k: v for k, v in fresh[image_id].items() if k != "split"}, image_id
 
 
 def test_us1_rows_carry_every_contract_field(tmp_path, capsys):
@@ -1119,7 +1125,7 @@ def test_us5_3_test_and_holdout_rows_are_read_only_for_evaluation(tmp_path, caps
                 module.load_manifest(manifest, split, purpose)
         loaded = module.load_manifest(manifest, "train", purpose)
         assert loaded.rows and {r["split"] for r in loaded.rows} == {"train"}
-    for purpose in ("evaluate", "serve"):
+    for purpose in ("evaluate", "serve", "extract"):
         loaded = module.load_manifest(manifest, "test", purpose)
         assert loaded.rows and {r["split"] for r in loaded.rows} == {"test"}
     assert loaded.sha256 == sha256(manifest)

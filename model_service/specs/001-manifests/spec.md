@@ -60,7 +60,7 @@ As the ML role, I declare a manifest version frozen before the first head is tra
 
 1. **Given** `freeze data/manifests/makerere_v1.jsonl`, **then** the file's sha256 is appended to `data/manifests/FROZEN.jsonl` as `{manifest, sha256, frozen_at, git_sha}` and the line for `DECISIONS.md` is printed. Freezing it again adds nothing.
 2. **Given** a frozen manifest whose bytes later change, **then** validation reports `frozen_manifest_modified` and exits 3, and the loader refuses the file.
-3. **Given** a loader call for `test` or `holdout_unknown` with `purpose = train` or `select`, **then** it raises `TestSplitAccessError`. Only `evaluate` and `serve` can read them.
+3. **Given** a loader call for `test` or `holdout_unknown` with `purpose = train` or `select`, **then** it raises `TestSplitAccessError`. Only `evaluate`, `serve` and `extract` (feature extraction, spec 002) can read them.
 4. **Given** a frozen version, **when** a build would change it, **then** the build exits 3 and leaves the file untouched. The change becomes `<manifest>_v2.jsonl`, and v1 stays as it was, frozen.
 5. **Given** a manifest with `licence = unknown`, **then** it can only be built with `--allow-unknown-licence`, which the sidecar records, and `freeze` refuses it with `licence_unknown` (exit 2).
 
@@ -118,7 +118,7 @@ As the ML role, I declare a manifest version frozen before the first head is tra
   The sidecar is rewritten only when something other than `built_at` and the builder has changed.
 - **FR-006** Duplicates:
   - **Exact** duplicates share a `sha256`, across all members of a manifest. They get one row with `dup_paths`; if the copies disagree on the label, the image is excluded with `label_conflict`.
-  - **Near** duplicates: pHash is the DCT of the orientation-applied greyscale image at 32×32, 64 bits. Its connected components at Hamming ≤ `phash_threshold` (default 6, recorded) form the `phash_group`, whose id is the smallest `image_id` in the component.
+  - **Near** duplicates: pHash is pinned so that every implementation writes the same bits. Take the orientation-applied image as greyscale (PIL `L`), resize it to 32×32 with Lanczos and apply an orthonormal 2-D DCT-II. Keep the top-left 8×8 coefficients, DC included. Each bit is "coefficient > the median of the 64", read row by row with the first bit most significant, and the result is written as 16 hex digits. Connected components at Hamming ≤ `phash_threshold` (default 6, recorded) form the `phash_group`, whose id is the smallest `image_id` in the component.
   - **Blocks** are the connected components of the trained-class rows under three links: same key value, same `phash_group`, and, for a row without the key, the key values that rows of any class (held-out ones included) carry on the same `date` (US-3.2). A block's id is `<key>:<values sorted, joined by +>`. Blocks and phash groups are atomic for splitting.
   - Duplicates **across manifests** are reported by `overlap`, never merged.
 - **FR-007** The class map is `configs/class_map_v1.yaml`: per manifest, `class_raw` → KM2 class or `excluded`. It is additive only: changing an entry means `class_map_v2`. `unknown_*` rows are always `holdout_unknown` and `none` rows are always `test`.
@@ -128,8 +128,8 @@ As the ML role, I declare a manifest version frozen before the first head is tra
   - **Build**, which also exits non-zero: `unmapped_class`, `rule_not_applicable`, `class_missing_from_split`, `licence_unknown`, `frozen_manifest_modified`, and `sha256_mismatch` for a file that differs from its member's `SHA256SUMS`.
   - **Exclusion**, recorded in `meta.json.excluded`: `not_an_image`, `decode_error`, `label_conflict`, `excluded_by_class_map`, `drawn_boxes`, `no_label`.
 - **FR-010** Licence gate: `licence = unknown` fails the build and validation unless the manifest was built with `--allow-unknown-licence`. `freeze` refuses it in every case.
-- **FR-011** The loader, used by 002–006, is `load_manifest(path, split, purpose)` with `purpose ∈ {train, select, evaluate, serve}`. It returns `.rows`, `.sha256` (of the file) and `.frozen` (listed in `FROZEN.jsonl` beside it).
-  - `test` and `holdout_unknown` are readable only for `evaluate` and `serve`; any other purpose raises `TestSplitAccessError`.
+- **FR-011** The loader, used by 002–006, is `load_manifest(path, split, purpose)` with `purpose ∈ {train, select, evaluate, serve, extract}`. `extract` is feature extraction (002): it reads every split and uses no labels. The loader returns `.rows`, `.sha256` (of the file) and `.frozen` (listed in `FROZEN.jsonl` beside it).
+  - `test` and `holdout_unknown` are readable only for `evaluate`, `serve` and `extract`; any other purpose raises `TestSplitAccessError`.
   - A frozen manifest whose bytes changed raises `FrozenManifestModified`.
 - **FR-012** Crops manifests (US-6) are derived and never hand-edited. They record the margin, link to the parent, and inherit `group_keys`, `split` and `split_rule`.
 - **FR-013** No fields beyond what the source publishes. `group_keys` hold published values only. Derived values, such as the district of a healthy image, appear only in `split_group`. The manifest holds no GPS.

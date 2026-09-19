@@ -181,3 +181,27 @@ passed them all (apart from US-1.1, which needs the fixture) to show they can be
 19. **Manifest recipes live in `configs/manifests/<manifest>.yaml`**, next to
     `configs/class_map_v1.yaml`. The download configs in `configs/datasets/` stay one per record,
     and `DatasetConfig` rejects keys it does not know.
+
+## 2026-09-19 — W1 · the fixture manifest; two amendments to spec 001
+
+20. **The fixture's manifest is `tests/fixtures/ibean_30/ibean_v1.jsonl` plus its sidecar**, not
+    `manifest.jsonl` as the work plan names it. These are the names spec 001 gives the builder's
+    output, so the builder can write the manifest in place and the loader finds the sidecar.
+    - Until the builder exists (W2), `tests/fixtures/make_ibean_30.py` writes it: 30 rows,
+      healthy and rust 7/1/2 into train/val/test, angular leaf spot held out. The same script
+      also rebuilds the images.
+    - A red test in `test_manifests.py` requires a fresh build to match these rows in every
+      field except `split`, which is the builder's own seeded draw. An independent
+      implementation already reproduces every other field.
+    - "CI runs on CPU on this fixture only" holds as a property of the tests: they run on CPU
+      and read no data outside `tests/` and `tmp_path`. The cache tests use a tiny
+      random-init backbone, so there are no downloads, and the golden test is opt-in. There is
+      no CI workflow in the repository yet. On Linux, `uv sync` would pull the cu128 torch
+      wheels (about 3 GB), so how CI installs torch is a choice for whoever sets CI up.
+21. **Spec 001 amended in two places.**
+    - **pHash is pinned bit for bit** in FR-006: greyscale, Lanczos to 32×32, orthonormal
+      DCT-II, top-left 8×8 against their median, row-major, first bit most significant.
+      Without that, `phash` would depend on the implementation, and the committed fixture
+      manifest could not be checked against the builder.
+    - **The loader gains `purpose = extract`** (FR-011). Feature extraction (spec 002) has to
+      read every split, test and held-out included, and it uses no labels.
