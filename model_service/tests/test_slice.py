@@ -1,11 +1,12 @@
 """The W2 vertical slice, end to end on the CPU fixture (docs/piece4-work-plan.md, W2 Mon-Tue).
 
 manifest (the committed fixture, spec 001) -> cache (spec 002, a tiny random-init backbone
-of the real class, as in test_cache.py) -> linear head (ms.heads.train) -> one N1 row
+of the real class, as in test_cache.py) -> linear head (ms.heads.train) -> the N1 rows
 (ms.eval.run) -> POST /v1/predict with one cached image (ms.service.app). Specs 003, 005 and
 006 come in W3-W5; these tests pin what the slice already promises: the role gate, same seed
--> same weights, re-runs that do nothing, a row that carries its split rule and both
-manifest hashes, and a service that answers the interface v0 record from the cache.
+-> same weights, re-runs that do nothing, rows that carry their split rule and both
+manifest hashes (per class since spec 005), and a service that answers the interface v0
+record from the cache.
 """
 
 from __future__ import annotations
@@ -168,7 +169,9 @@ def test_the_same_seed_gives_the_same_weights_and_a_rerun_does_nothing(
 # --- the N1 row -------------------------------------------------------------------------------
 
 
-def test_eval_writes_one_n1_row_with_its_split_rule_and_both_hashes(tmp_path, capsys, cache_root):
+def test_eval_writes_the_n1_rows_with_their_split_rule_and_both_hashes(
+    tmp_path, capsys, cache_root
+):
     heads = tmp_path / "heads"
     assert train(capsys, cache_root, heads, "--allow-test-only")[0] == 0
     table, md = tmp_path / "n_table.jsonl", tmp_path / "n_table.md"
@@ -177,22 +180,26 @@ def test_eval_writes_one_n1_row_with_its_split_rule_and_both_hashes(tmp_path, ca
         "--md", str(md), "--compute-log", str(tmp_path / "log.jsonl"),
     ]  # fmt: skip
     assert eval_run.main(argv) == 0
-    (row,) = [json.loads(line) for line in table.read_text(encoding="utf-8").splitlines()]
+    rows = [json.loads(line) for line in table.read_text(encoding="utf-8").splitlines()]
+    # spec 005 US-3: macro-F1 and one recall per class; one seed, so no aggregate
+    assert sorted(r["metric"] for r in rows) == ["macro_f1", "recall:healthy", "recall:rust"]
+    (row,) = [r for r in rows if r["metric"] == "macro_f1"]
     assert list(row) == list(N_FIELDS)
     test_rows = [r for r in manifest_rows() if r["split"] == "test"]
-    assert (row["number"], row["metric"], row["n"]) == ("N1", "macro_f1", len(test_rows))
-    assert 0.0 <= row["value"] <= 1.0
-    assert row["split_rule"] == "unblocked:random_by_phash_group"
-    assert row["train_manifest_sha256"] == row["test_manifest_sha256"] == sha256(MANIFEST)
-    assert (row["train_split"], row["test_split"]) == ("train", "test")
-    assert (row["ci_low"], row["ci_high"], row["coverage"]) == (None, None, 1.0)
-    assert row["quotable"] is False and row["run_id"] == only_run(heads).name
+    assert (row["number"], row["n"]) == ("N1", len(test_rows))
+    for r in rows:
+        assert 0.0 <= r["value"] <= 1.0
+        assert r["split_rule"] == "unblocked:random_by_phash_group"
+        assert r["train_manifest_sha256"] == r["test_manifest_sha256"] == sha256(MANIFEST)
+        assert (r["train_split"], r["test_split"]) == ("train", "test")
+        assert (r["ci_low"], r["ci_high"], r["coverage"]) == (None, None, 1.0)
+        assert r["quotable"] is False and r["run_id"] == only_run(heads).name
     text = md.read_text(encoding="utf-8")
     assert "## N1" in text and "unblocked:random_by_phash_group" in text and "not quotable" in text
 
     capsys.readouterr()
     assert eval_run.main(argv) == 0  # nothing new: no row, the table unchanged
-    assert len(table.read_text(encoding="utf-8").splitlines()) == 1
+    assert len(table.read_text(encoding="utf-8").splitlines()) == 3
     assert "0 row(s) added" in capsys.readouterr().out
 
 

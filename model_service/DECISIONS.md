@@ -653,3 +653,67 @@ the owner's request, and what stays open for piece 3 is listed in `store/README.
     - The hand-over is a section of `store/README.md`. It gives both formats in short, with
       pointers to specs 001 and 002, the DVC routine, and what stays open for piece 3: the
       remote, and whether `data/raw/` and `data/derived/` go under DVC.
+
+## 2026-09-19 — W3 · specs 003 (heads) and 005 (the N-table), ahead of schedule
+
+The work plan's "Spec S4.3 + S4.5": `specs/003-heads/spec.md` and
+`specs/005-results-table/spec.md`. Their tests run on synthetic manifests and caches
+(`tests/synthetic.py`) and are red until the W3 Heads and N1 tasks. `test_heads.py` has 21 red
+and 2 green, which the W2 trainer's linear head already passes. `test_n_table.py` has 46 red.
+The slice's N1 test in `test_slice.py` now expects spec 005's rows, so it is red too.
+
+58. **The head command runs the W3 protocol by default.**
+    - `--head` takes any of linear, proto and mix, and `--seed` several seeds. The defaults
+      are all three heads and seeds 0–4 (work plan §4). Each (head, seed) pair is one run.
+    - Every input is checked before the first run trains, so an input error writes nothing.
+    - Asking for a test or held-out split is an exit with `test_split_access`, not a
+      traceback.
+    - The validation manifest has to be the training manifest (`val_not_in_domain`). Early
+      stopping on another manifest would tune on N2's target.
+59. **The mixture mixes two trained heads.** H8's "fixed 0.5/0.5 mixture" is
+    p = 0.5 · p_linear + 0.5 · p_proto, from the linear and proto runs with the same inputs and
+    seed. Nothing is trained, and its logits are log p.
+    - A mixture trained end to end would make its parts differ from the linear and proto
+      heads that the table reports.
+    - A mix run trains its missing components first and records their run ids.
+60. **The prototype head.**
+    - It has K = 4 prototypes per class. A class's logit is the cosine of its nearest
+      prototype over τ.
+    - τ starts at 0.07 and is learned as `log_tau`, without weight decay: decay would pull τ
+      towards 1 and flatten the logits.
+    - The prototypes start from per-class k-means on the L2-normalised train features,
+      seeded by the run's seed. A class with fewer than 4 train rows is `too_few_rows`.
+61. **`run.json` v2 keeps every v1 key**, so the eval and the service read it unchanged.
+    - It adds `components` and the effective recipe: a config without `sampling` records
+      `class_balanced`, the default.
+    - The trainer version is an input of the run id, so v2 runs get new ids. The W2 slice's
+      run is not quotable anyway.
+62. **The N-table holds the per-seed rows and their aggregates.**
+    - An aggregate has `seed = null`, the mean over seeds 0–4 and a 95 % Student t interval
+      (4 degrees of freedom), and joins the five run ids with `+`. With five values, a
+      percentile interval would be just the minimum and the maximum.
+    - Pieces 5 and 6 read the `.jsonl`, so the reported number has to be in it. The `.md`
+      shows the aggregates and the rows that no aggregate covers.
+63. **N1 is macro-F1 plus one recall per class**, so the rarest class is never averaged away.
+    `n` is the number of rows each value is computed over.
+64. **Rows are checked before they are appended** (`validate_row`; `NTableError`).
+    - The fields are in order. The split rule is from spec 001's vocabulary or N4's
+      `unblocked:5fold_by_phash_group`, and each manifest has one 64-hex hash.
+    - Only known numbers and metrics pass, and no number is scored on a train or validation
+      split.
+    - N3 rows use held-out classes only. When the frozen list is given, every quotable row's
+      manifests are frozen (spec 001 SC-5).
+    - The committed rows pass, and a test checks the file.
+65. **The verdict's rules are copied from the work plan, not from H9 §7.** H9 is not in the
+    repository.
+    - Spec 005 US-6 declares what the plan states: ≥ 2 pp on two of three N2 directions with
+      non-overlapping intervals, ≥ 0.02 AUROC on N3, N4 then N6 as tie-breakers, and the
+      licence gate.
+    - Spec 005 Clarification 6 lists what H9 §7 still has to settle before N2's numbers
+      exist.
+66. **Left open.**
+    - For N2: training on two manifests (Makerere + iBean) against iBean's `test_only` role,
+      and what happens to Tanzania's anthracnose (spec 003 Clarifications 10–11; spec 005
+      Clarification 7).
+    - For the Heads task: the linear head's underfitting (34), measured before the five-seed
+      runs (spec 003 Clarification 9).
