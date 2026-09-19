@@ -1,6 +1,6 @@
-# Linear probe - the reference head (H8 6.5): logistic regression on L2-normalised features,
-# trained with the shared head recipe of H8 6.5 / work plan W3. First used by the W2 vertical
-# slice (DECISIONS 34); spec 003 (W3) may change any value, and a changed file is a new run_id.
+# Linear probe - the reference head (H8 6.5; spec 003 US-2.1): logistic regression on
+# L2-normalised features, trained with the shared head recipe of H8 6.5 / work plan W3. First
+# used by the W2 vertical slice (DECISIONS 34). A changed file is a new run_id (spec 003 FR-002).
 head: linear
 optimizer: adamw
 lr: 1.0e-3            # H8: 5e-4 - 1e-3

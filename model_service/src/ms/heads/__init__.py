@@ -1,16 +1,22 @@
-"""Heads on cached features (S4.3; spec 003 comes in W3, this is the W2 slice's linear probe).
+"""Heads on cached features (S4.3; specs/003-heads/spec.md).
 
-    python -m ms.heads.train --backbone dinov2_l14_reg --res 224 --head linear --seed 0 \\
-        --train-manifest data/manifests/ibean_v1.jsonl --split train --val-split val
+    python -m ms.heads.train --backbone dinov2_l14_reg --res 224 \\
+        --train-manifest data/manifests/makerere_v1.jsonl   # linear, proto, mix x seeds 0-4
 
 A run is data/heads/<run_id>/ (git-ignored): head.pt, the weights, and run.json, with the
 inputs and their hashes, the fit and the model_version string (H8 6.2). Features are
 L2-normalised per token type; "cls+meanpatch" concatenates the two (the W4 ablation).
+
+The heads (spec 003 US-2): `linear`, one affine map (multinomial logistic regression);
+`proto`, K prototypes per class, a class scoring the cosine of its nearest prototype over a
+learnable temperature; `mix`, the fixed 0.5/0.5 mixture of the linear and proto heads'
+probabilities, whose logits are the log of the mixture.
 """
 
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -18,6 +24,7 @@ from typing import Any
 import numpy as np
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from ms.cache import Cache
 
@@ -58,13 +65,67 @@ class LinearHead(nn.Module):
         return self.linear(x)
 
 
-HEADS = {"linear": LinearHead}
+class ProtoHead(nn.Module):
+    """K prototypes per class; a class's logit is the largest cosine between the features and
+    its prototypes, over tau. tau is learned as log_tau (spec 003 US-2.2)."""
+
+    def __init__(
+        self, dim: int, n_classes: int, prototypes_per_class: int = 4, tau_init: float = 0.07
+    ) -> None:
+        super().__init__()
+        if prototypes_per_class < 1 or tau_init <= 0:
+            raise ValueError("prototypes_per_class must be >= 1 and tau_init > 0")
+        self.prototypes = nn.Parameter(
+            F.normalize(torch.randn(n_classes, prototypes_per_class, dim), dim=-1)
+        )
+        self.log_tau = nn.Parameter(torch.tensor(math.log(tau_init)))
+
+    @property
+    def tau(self) -> float:
+        return float(self.log_tau.detach().exp())
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        cos = torch.einsum(
+            "nd,ckd->nck", F.normalize(x, dim=-1), F.normalize(self.prototypes, dim=-1)
+        )
+        return cos.amax(dim=2) / self.log_tau.exp()
 
 
-def build_head(head: str, dim: int, n_classes: int) -> nn.Module:
+class MixHead(nn.Module):
+    """p = w_linear * softmax(linear) + w_proto * softmax(proto), weights fixed; the logits
+    are log p, so a softmax gives p back (spec 003 US-2.3)."""
+
+    def __init__(
+        self,
+        dim: int,
+        n_classes: int,
+        weights: tuple[float, float] | list[float] = (0.5, 0.5),
+        linear: dict[str, Any] | None = None,
+        proto: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__()
+        if len(weights) != 2 or min(weights) < 0 or not math.isclose(sum(weights), 1.0):
+            raise ValueError(f"mix weights must be two shares summing to 1, got {weights}")
+        self.weights = [float(w) for w in weights]
+        self.linear = LinearHead(dim, n_classes, **(linear or {}))
+        self.proto = ProtoHead(dim, n_classes, **(proto or {}))
+        self.register_buffer("log_weights", torch.tensor(self.weights).log(), persistent=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        parts = torch.stack(
+            [F.log_softmax(self.linear(x), dim=1), F.log_softmax(self.proto(x), dim=1)]
+        )
+        return torch.logsumexp(parts + self.log_weights[:, None, None], dim=0)
+
+
+HEADS: dict[str, type[nn.Module]] = {"linear": LinearHead, "proto": ProtoHead, "mix": MixHead}
+
+
+def build_head(head: str, dim: int, n_classes: int, **params: Any) -> nn.Module:
+    """A head of its kind; `params` are its constructor arguments (spec 003 FR-005)."""
     if head not in HEADS:
-        raise ValueError(f"head must be one of {tuple(HEADS)} (proto and mix come in W3)")
-    return HEADS[head](dim, n_classes)
+        raise ValueError(f"head must be one of {tuple(HEADS)}, got {head!r}")
+    return HEADS[head](dim, n_classes, **params)
 
 
 @dataclass
@@ -103,7 +164,9 @@ def load_run(folder: Path | str) -> Run:
     folder = Path(folder)
     meta = json.loads((folder / "run.json").read_text(encoding="utf-8"))
     saved = torch.load(folder / "head.pt", map_location="cpu", weights_only=True)
-    model = build_head(saved["head"], int(saved["input_dim"]), len(saved["classes"]))
+    model = build_head(
+        saved["head"], int(saved["input_dim"]), len(saved["classes"]), **saved.get("params", {})
+    )
     model.load_state_dict(saved["state_dict"])
     model.eval()
     return Run(folder, meta, model)

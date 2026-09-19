@@ -1,6 +1,6 @@
 # Feature specification: 003 — Heads
 
-**Branch**: `003-heads` · **Created**: 2026-09-19 · **Status**: Draft 2026-09-19; acceptance tests in `model_service/tests/test_heads.py`, red until the W3 "Heads" task (the W2 slice's linear trainer passes a few of them already)
+**Branch**: `003-heads` · **Created**: 2026-09-19 · **Status**: Implemented 2026-09-19 (`ms.heads`, `ms.heads.train`, `configs/heads/`); acceptance tests in `model_service/tests/test_heads.py` green; SC-1 met at 224 on 2026-09-19 for both backbones on `makerere_v1` and `tanzania_v1` (DECISIONS 67–70)
 **Input**: H8 §6.5 (heads), `docs/piece4-work-plan.md` S4.3, the W3 "Heads" task and §4 (conventions: seeds 0–4), DECISIONS 33–35 (the slice's trainer, its recipe and the role gate), spec 001 (roles, the loader's purposes), spec 002 (caches). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
 
 ## Why
@@ -59,7 +59,7 @@ Every N1–N3 number comes from a head trained on cached features, so a head run
 
 1. **Given** a run that trains or mixes, **then** it appends one compute-log row through `ms.compute_log` with these fields:
    - `step = "train_head"`, `backbone_id`, `res`, `dataset` (the training manifest's), `n_images_or_runs = 1`;
-   - `wallclock_s`: the run's own seconds, from reading its inputs to writing its folder;
+   - `wallclock_s`: the run's own seconds, from the start of its fit (or its mixing) to writing its folder. The runs of one call read their shared inputs (manifests, caches) once, and that reading is in no run's seconds;
    - `device`, `vram_gb` (null on CPU), `notes`;
    - a `head` object: `run_id`, `head`, `tokens`, `seed`, `n_train`, `n_val`, `epochs_run`, `best_epoch`, and for mix, `components` (the two run ids).
 
@@ -96,7 +96,8 @@ Every N1–N3 number comes from a head trained on cached features, so a head run
   Every v1 key keeps its meaning, so the eval (005) and the service (006) read v2 runs unchanged.
 - **FR-005 `head.pt`.**
   - It holds `{head, classes, tokens, input_dim, params, state_dict}` and loads with `torch.load(..., weights_only=True)`. `params` are the head's constructor arguments.
-  - linear's state is `linear.weight` `[C, D]` and `linear.bias` `[C]`. proto's is `prototypes` `[C, K, D]` and `log_tau` `[]`. mix holds `components` (both state dicts, with their params) and `weights`.
+  - linear's state is `linear.weight` `[C, D]` and `linear.bias` `[C]`. proto's is `prototypes` `[C, K, D]` and `log_tau` `[]`.
+  - mix's `params` hold `weights` and each component's params (`linear`, `proto`), and its `state_dict` holds both components' states (`linear.*`, `proto.*`). A `components` entry names their runs.
   - `ms.heads.load_run(folder)` returns a `Run` whose `logits(x)` and `predict_proba(x)` score features.
 - **FR-006 Recipe.**
   - AdamW with the config's `lr` (H8 range 5e-4 to 1e-3) and weight decay 1e-4. Weight decay does not apply to `log_tau`.
@@ -109,7 +110,7 @@ Every N1–N3 number comes from a head trained on cached features, so a head run
   - The validation manifest is in domain, and the classes are valid (US-5.2).
   - One cache key holds both manifests' caches, and every head config parses.
 
-  A failure prints `<reason>: …` and exits 2. The reasons are `role_not_trainable`, `test_split_access`, `val_not_in_domain`, `frozen_manifest_modified`, `missing_cache`, `bad_config`, `bad_value` and `too_few_rows`.
+  A failure prints `<reason>: …` and exits 2. The reasons are `role_not_trainable`, `test_split_access`, `val_not_in_domain`, `frozen_manifest_modified`, `missing_file`, `missing_cache`, `bad_config`, `bad_value` and `too_few_rows`.
 - **FR-009 Compute log.** Each run writes one row, as US-6 describes.
 - **FR-010 API.**
   - `ms.heads` exports `HEADS` (`linear`, `proto`, `mix`), `build_head(head, dim, n_classes, **params)`, `features`, `model_version`, `load_run`, `list_runs` and `Run`.
@@ -120,7 +121,7 @@ Every N1–N3 number comes from a head trained on cached features, so a head run
 
 - **SC-1** Both backbones at 224 have, on `makerere_v1` and on `tanzania_v1`, the three heads × five seeds: every run has its folder and its compute-log row (the W3 Heads task).
 - **SC-2** Re-running `make heads` with unchanged inputs does nothing and adds no row.
-- **SC-3** Every `train_head` row of the compute log names a run folder, and every run folder has exactly one row.
+- **SC-3** Every run folder has exactly one `train_head` row in the compute log. A deleted run's row stays (DECISIONS 34), so the reverse need not hold.
 - **SC-4** The CPU tests use synthetic manifests and caches, run in under one minute, and need neither network nor GPU.
 - **SC-5** No run reads a test or held-out row with `purpose = train` or `select` (US-3).
 
@@ -142,9 +143,10 @@ Closed on 2026-09-19:
 7. **The defaults are the W3 protocol**: every head, seeds 0–4.
 8. **`run_json_version` 2 keeps every v1 key**, and adds `components` and the effective recipe. `trainer_version` 2 is an input, so v2 runs get new run ids; the slice's run is not quotable anyway.
 
+9. **The linear head's steps (closed on 2026-09-19, by measurement; DECISIONS 69).** On Makerere (27 steps per epoch) the linear head is still improving when the 50 epochs end: its best epoch is 50 for four seeds of five on both backbones. On Tanzania (307 steps per epoch) it stops by epoch 15. H8's recipe stays: 50 epochs, and lr 1e-3 is already the top of its range. A logit scale or more epochs would be a config change with new run ids, not a contract change, and it is the owner's call.
+
 Open:
 
-9. **The linear head underfits on few steps** (DECISIONS 34). The Heads task measures it on Makerere and Tanzania before the five-seed runs. A logit scale or more epochs would be a config change (a new run id), not a contract change.
 10. **Training on several manifests.** N2's "Makerere + iBean → Tanzania" trains on two manifests, and iBean's role is `test_only` (spec 001 FR-001; DECISIONS 35). Both are settled with N2, and a run has one training manifest until then.
 11. **Anthracnose in N2.** Tanzania's third class can be trained and then left out of the scoring, or the heads can be trained on the shared classes only. N2's protocol decides.
 

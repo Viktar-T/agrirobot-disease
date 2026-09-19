@@ -17,6 +17,7 @@ import pytest
 import torch
 import yaml
 from synthetic import BACKBONE, COUNTS, DIM, RES, make_manifest, rows_of, sha256, write_cache
+from threadpoolctl import threadpool_limits
 
 import ms.heads as heads
 from ms import compute_log
@@ -259,6 +260,21 @@ def test_prototypes_start_at_the_per_class_k_means_centroids():
             assert (p[c] @ np.eye(d)[4 * c + k]).max() > 0.95
     again = np.asarray(torch.as_tensor(heads_train.init_prototypes(x, y, 2, 4, seed=0)).detach())
     assert np.array_equal(p, again.astype(np.float64))
+
+
+@pytest.mark.parametrize("threads", [1, 4, None])
+def test_the_prototype_start_does_not_depend_on_the_thread_count(threads):
+    """US-1.2: the same seed, the same start, on any number of threads (on several, k-means
+    adds its threads' partial sums in the order they finish)."""
+    rng = np.random.default_rng(1)
+    x = rng.normal(size=(12000, DIM)).astype(np.float32)
+    y = np.repeat([0, 1, 2], 4000)
+    with threadpool_limits(limits=1):
+        reference = np.asarray(heads_train.init_prototypes(x, y, 3, 4, seed=0))
+    for _ in range(2):
+        with threadpool_limits(limits=threads):
+            start = np.asarray(heads_train.init_prototypes(x, y, 3, 4, seed=0))
+        assert np.array_equal(start, reference)
 
 
 def test_the_mix_is_the_fixed_half_half_mixture_of_its_components(tmp_path, capsys):

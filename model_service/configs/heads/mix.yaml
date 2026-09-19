@@ -1,0 +1,6 @@
+# Mixture (H8 6.5; spec 003 US-2.3): p = 0.5 p_linear + 0.5 p_proto, the softmax
+# probabilities of the linear and proto runs with the same inputs and seed. The weights are
+# fixed and nothing is trained; the logits are log p. A changed file is a new run_id.
+head: mix
+components: [linear, proto]
+weights: [0.5, 0.5]

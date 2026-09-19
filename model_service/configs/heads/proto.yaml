@@ -1,0 +1,18 @@
+# Prototype head (H8 6.5; spec 003 US-2.2): K prototypes per class; a class scores the cosine
+# of its nearest prototype over a learnable temperature tau. The prototypes start as each
+# class's k-means centroids (seeded by the run's seed) on the L2-normalised train features.
+# The shared head recipe is linear.yaml's. A changed file is a new run_id (spec 003 FR-002).
+head: proto
+prototypes_per_class: 4
+tau_init: 0.07        # learned as log tau, without weight decay (spec 003 FR-006)
+optimizer: adamw
+lr: 1.0e-3            # H8: 5e-4 - 1e-3
+weight_decay: 1.0e-4  # on the prototypes, not on tau
+batch_size: 256
+max_epochs: 50
+patience: 10
+loss: focal
+focal_gamma: 2.0
+label_smoothing: 0.1
+sampling: class_balanced
+select: balanced_val_loss

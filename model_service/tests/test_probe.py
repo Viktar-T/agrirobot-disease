@@ -24,6 +24,14 @@ from ms.eval import probe
 
 SETS = ("alpha", "beta", "gamma")
 DIM = 8
+#: each set's blocking key, a spec 001 group key, so that the N4 row's joined rule is one the
+#: N-table accepts (spec 005 FR-003)
+RULES = {
+    "alpha": "blocked:date",
+    "beta": "blocked:district",
+    "gamma": "blocked:region",
+    "delta": "blocked:district",
+}
 
 
 def image_row(dataset: str, i: int, klass: str, split: str, **keys) -> dict:
@@ -34,7 +42,7 @@ def image_row(dataset: str, i: int, klass: str, split: str, **keys) -> dict:
         "sha256": hashlib.sha256(image_id.encode()).hexdigest(),
         "class_km2": klass,
         "split": split,
-        "split_rule": "holdout_unknown" if split == "holdout_unknown" else f"blocked:{dataset}",
+        "split_rule": "holdout_unknown" if split == "holdout_unknown" else RULES[dataset],
         "group_keys": {"district": None, "phash_group": image_id, **keys},
     }
 
@@ -185,7 +193,7 @@ def test_the_dataset_probe_reads_a_planted_site_and_its_row_says_how(tmp_path, c
     files = [tmp_path / "manifests" / f"{s}_v1.jsonl" for s in SETS]
     assert row["test_manifest_sha256"] == "+".join(sha256(f) for f in files)
     assert row["train_manifest"].split("+")[0].endswith("alpha_v1.jsonl")
-    assert row["split_rule"] == "blocked:alpha+blocked:beta+blocked:gamma"
+    assert row["split_rule"] == "blocked:date+blocked:district+blocked:region"
     assert row["run_id"].startswith("n4-dataset-bb-28-cls-")
     md = (tmp_path / "n_table.md").read_text(encoding="utf-8")
     assert "## N4 — site-prediction probe" in md and "(chance 0.333)" in md
@@ -296,6 +304,16 @@ def test_a_missing_cache_stops_the_run_before_anything_is_written(tmp_path, caps
     make_districts(tmp_path, backbones=("bb",))
     code, text = run(capsys, tmp_path, "--no-mlflow", backbones=("bb", "absent"))
     assert code == 2 and "missing_cache" in text
+    assert not (tmp_path / "n_table.jsonl").exists()
+    assert not (tmp_path / "compute_log.jsonl").exists()
+
+
+def test_an_invalid_row_stops_the_probe_before_anything_is_written(tmp_path, capsys, monkeypatch):
+    """Spec 005 US-1.2: the row is checked before MLflow and the compute log see it."""
+    monkeypatch.setitem(RULES, "alpha", "blocked:alpha")  # not a spec 001 group key
+    make_sets(tmp_path, site=3.0)
+    code, text = run(capsys, tmp_path, "--target", "dataset", "--no-mlflow")
+    assert code == 2 and "bad_split_rule" in text
     assert not (tmp_path / "n_table.jsonl").exists()
     assert not (tmp_path / "compute_log.jsonl").exists()
 

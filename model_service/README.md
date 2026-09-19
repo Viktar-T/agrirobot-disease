@@ -60,6 +60,21 @@ On Windows, `.\make.ps1 manifests -DS ibean`, `.\make.ps1 cache -BB dinov2_l14_r
 -DS ibean`, and so on. Every step is idempotent: run it again and it does nothing. Heads land
 in `data/heads/<run_id>/` (git-ignored).
 
+## The heads (S4.3)
+
+Three heads on the cached features, five seeds each (`specs/003-heads/spec.md`): `linear`
+(logistic regression), `proto` (4 prototypes per class, cosine over a learned temperature)
+and `mix` (their fixed 0.5/0.5 mixture). The recipe is `configs/heads/<head>.yaml`.
+
+```bash
+make heads BB=dinov2_l14_reg RES=224 ARGS="--train-manifest data/manifests/makerere_v1.jsonl"
+make heads BB=dinov3_l16 RES=224 ARGS="--train-manifest data/manifests/tanzania_v1.jsonl --head proto --seed 0"
+```
+
+A call trains linear, proto and mix for seeds 0–4 unless `--head` and `--seed` say otherwise,
+and skips every run that already exists. Runs land in `data/heads/<run_id>/` (git-ignored),
+and each writes its seconds to the compute log. `make eval` then scores them into the N-table.
+
 ## The site probe (N4)
 
 How easily the cached CLS features give away where a picture was taken: which bean set, and

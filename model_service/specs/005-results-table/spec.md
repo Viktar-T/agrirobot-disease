@@ -1,6 +1,6 @@
 # Feature specification: 005 — Results table (the N-table)
 
-**Branch**: `005-results-table` · **Created**: 2026-09-19 · **Status**: Draft 2026-09-19; acceptance tests in `model_service/tests/test_n_table.py`, red until the W3 "Heads" and "N1" tasks. The verdict's tests (US-6) come with the W4 "Verdict" task.
+**Branch**: `005-results-table` · **Created**: 2026-09-19 · **Status**: Implemented 2026-09-19 with the W3 Heads task (`ms.eval`: row checks, aggregates, pairs, rendering; `ms.eval.run`: N1 per class); acceptance tests in `model_service/tests/test_n_table.py` green (DECISIONS 68). The verdict (US-6) and its tests come with the W4 "Verdict" task.
 **Input**: H8 §6.7 (results), H9 §7 (the verdict, as the work plan summarises it), `docs/piece4-work-plan.md` S4.5, the W3–W4 tasks and §4 (seeds; criteria written before the numbers), DECISIONS 36 (the provisional row) and 54 (the N4 row), specs 001 (split rules, hashes, freeze) and 003 (runs). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
 
 ## Why

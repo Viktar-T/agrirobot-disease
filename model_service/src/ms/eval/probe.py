@@ -65,7 +65,16 @@ from ms.data.manifests import (
     manifest_path,
     repo_relative,
 )
-from ms.eval import N_TABLE, N_TABLE_MD, REPO_ROOT, append_rows, identity, read_rows, write_md
+from ms.eval import (
+    N_TABLE,
+    N_TABLE_MD,
+    REPO_ROOT,
+    append_rows,
+    identity,
+    read_rows,
+    validate_row,
+    write_md,
+)
 from ms.heads import features
 
 PROBE_VERSION = 1
@@ -653,6 +662,10 @@ def run(args: argparse.Namespace) -> int:
             continue
         result = compute(plan)
         row = n4_row(plan, result)
+        problems = validate_row(row)  # before MLflow and the compute log (spec 005 US-1.2)
+        if problems:
+            reason, _, what = problems[0].partition(": ")
+            raise ProbeError(reason, f"{plan.probe_id}: {what}")
         if not in_table:
             new.append(row)
         mlflow_run = None if in_mlflow else tracker.log(plan, result, row)

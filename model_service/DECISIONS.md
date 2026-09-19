@@ -717,3 +717,85 @@ The slice's N1 test in `test_slice.py` now expects spec 005's rows, so it is red
       Clarification 7).
     - For the Heads task: the linear head's underfitting (34), measured before the five-seed
       runs (spec 003 Clarification 9).
+
+## 2026-09-19 — W3 · the heads, five seeds at 224 (ahead of schedule)
+
+The work plan's "Heads", built to specs 003 and 005 (58–66). The code of spec 005 came with it,
+so `test_heads.py` (26 tests) and `test_n_table.py` (46) are green, with the rest of the suite:
+202 passed, 1 skipped (the golden test, opt-in).
+
+67. **The heads as spec 003 says, and one fix that running them showed.**
+    - proto starts from per-class k-means (scikit-learn, k-means++, one initialisation,
+      `random_state` = the seed). Then AdamW trains the prototypes and `log_tau`, with no
+      weight decay on `log_tau`.
+    - A mix's `head.pt` holds both components' states and params, so it loads on its own.
+    - **k-means runs on one thread.** On several threads, scikit-learn adds their partial
+      cluster sums in the order they finish. So the same seed gave other centroids from call
+      to call: two calls on Makerere's features in one process disagreed. The first 60 runs
+      therefore had proto heads that no second run could repeat. On Makerere they even kept
+      other epochs (48 instead of 31).
+    - On one thread the start is the same in every process. The trainer version went to 3,
+      and the 60 runs were deleted and trained again. Seven of them were then trained a
+      second time, in another process and under load, and gave the same weights bit for bit.
+    - The deleted runs' compute-log rows stay (34), so the log holds 60 rows without a
+      folder. `test_heads.py` now checks the start on 1 thread, 4 threads and all of them.
+      Without the one-thread limit, k-means on that test's data gives other centroids on 4
+      threads and on all of them.
+    - `wallclock_s` counts a run's fit (or mixing) and its writing. A call reads its
+      manifests and caches once for all its runs, and that reading is in no run's seconds
+      (spec 003 US-6, amended).
+    - Spec 003 was amended in three more places: FR-005 (how a mix's `head.pt` holds its
+      components), FR-008 (`missing_file`) and SC-3 (every folder has one row; a deleted
+      run's row stays).
+68. **The N-table code of spec 005.**
+    - `validate_row` checks every row before `append_rows` writes it. An invalid row raises
+      `NTableError`, and nothing is appended.
+    - `aggregate` adds the five-seed rows, and `unpaired` lists the N1/N2 pairs that are
+      still incomplete.
+    - `n_table.md` shows the aggregates (seeds `0–4`) and the rows that no aggregate
+      covers, sorted by manifest, backbone, head and metric.
+    - `make eval` writes macro-F1 and one recall per class for every run. A row is quotable
+      only when its run is quotable and both manifests are frozen.
+    - The probe (N4) now checks its row before MLflow and the compute log see it (exit 2), and
+      a new test covers that.
+    - `test_probe.py`'s synthetic sets are now blocked by real spec 001 keys (`date`,
+      `district`, `region`), because the N-table accepts only those.
+69. **The linear head on Makerere ends at the 50-epoch cap** (spec 003 Clarification 9,
+    closed). Seed 0 was measured first, then all five seeds:
+    - On Makerere (6,818 train rows, 27 steps per epoch) the linear head's best epoch is 50
+      for four seeds of five on both backbones (48 for the fifth). The validation loss still
+      falls by about 0.005 per 10 epochs, so the head is not done when H8's recipe stops it.
+    - proto reaches its best by epochs 11–47 there. Its τ is learned down to 0.04–0.06, which
+      makes its logits larger from the start.
+    - On Tanzania (78,454 train rows, 307 steps per epoch) every head stops early. The linear
+      head's selection score, the per-class validation loss, is best at epochs 3–5. Its
+      validation macro-F1 still rises a little after that (seed 0, DINOv2: 0.982 at epoch 3,
+      0.987 at epoch 13), because the loss grows on the few rows the head gets wrong.
+    - H8's recipe stays: 50 epochs, and lr 1e-3 is already the top of its range. A fixed
+      logit scale for the linear head (for example 1/0.07, proto's starting τ) or more
+      epochs would change the recipe, so it is the owner's call. It would be a config change
+      with new runs, a few minutes of CPU.
+70. **The W3 runs at 224: 60 runs.** Both backbones × `makerere_v1` and `tanzania_v1` ×
+    linear, proto and mix × seeds 0–4 (spec 003 SC-1), 238 s of CPU in all.
+    - Rerunning a call does nothing and adds no row (SC-2).
+    - Every run folder has one compute-log row (SC-3).
+    - Makerere trains healthy and rust (6,818 rows; 1,471 for validation). Tanzania trains
+      healthy, rust and anthracnose (78,454; 11,354).
+
+    | backbone | set | head | best epoch, seeds 0–4 | validation macro-F1, mean (min–max) | τ | s per run |
+    |---|---|---|---|---|---|---|
+    | `dinov2_l14_reg` | Makerere | linear | 50, 50, 50, 50, 48 | 0.956 (0.953–0.958) | — | 1.4 |
+    | | | proto | 34, 30, 40, 23, 47 | 0.962 (0.956–0.964) | 0.041–0.051 | 2.8 |
+    | | | mix | — | 0.965 (0.963–0.968) | — | 0.1 |
+    | | Tanzania | linear | 3, 3, 4, 5, 4 | 0.983 (0.982–0.984) | — | 5.9 |
+    | | | proto | 6, 6, 2, 33, 6 | 0.991 (0.991–0.992) | 0.058–0.071 | 13.5 |
+    | | | mix | — | 0.991 (0.990–0.992) | — | 0.2 |
+    | `dinov3_l16` | Makerere | linear | 50, 50, 50, 50, 48 | 0.948 (0.947–0.949) | — | 1.2 |
+    | | | proto | 35, 24, 44, 11, 39 | 0.950 (0.942–0.956) | 0.043–0.061 | 2.1 |
+    | | | mix | — | 0.955 (0.951–0.958) | — | 0.1 |
+    | | Tanzania | linear | 3, 3, 3, 3, 3 | 0.987 (0.986–0.988) | — | 3.5 |
+    | | | proto | 13, 18, 24, 25, 6 | 0.992 (0.991–0.994) | 0.052–0.066 | 16.7 |
+    | | | mix | — | 0.992 (0.990–0.993) | — | 0.2 |
+
+    These validation numbers drive early stopping. They are not N1, which reads the test
+    splits (the next task).
