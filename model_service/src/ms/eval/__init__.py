@@ -4,7 +4,9 @@ n_table.md.
 One JSON line per number, written by code (`make eval`, `make probe`), never by hand, and
 checked before it is appended. Every row carries the split rule and the hashes of both
 manifests (D-9). The five seeds of a number give one aggregate row (seed null): their mean
-and a 95 % Student t interval. n_table.md is rendered from the JSON lines and never edited.
+and a 95 % Student t interval. A row whose runs an owner's recipe change replaced stays,
+marked `superseded` (`python -m ms.eval.supersede`); the mark is the only change a row ever
+gets. n_table.md is rendered from the JSON lines and never edited.
 """
 
 from __future__ import annotations
@@ -54,6 +56,7 @@ FIELDS = (
     "model_version",
     "cache_key",
     "quotable",
+    "superseded",
     "notes",
 )
 #: what makes two rows the same number (FR-004)
@@ -201,6 +204,8 @@ def validate_row(row: dict[str, Any], frozen: set[str] | None = None) -> list[st
     for field in ("model_version", "cache_key", "notes"):
         if not (row[field] is None or isinstance(row[field], str)):
             bad("bad_value", field)
+    if not (row["superseded"] is None or _text(row["superseded"])):
+        bad("bad_value", "superseded")
     if not isinstance(row["quotable"], bool):
         bad("bad_value", "quotable")
     if row["number"] == "N3" and not (
@@ -273,7 +278,7 @@ def aggregate(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
         v = np.array([r["value"] for r in five], dtype=np.float64)
         mean = float(v.mean())
         half = T_975_4 * float(v.std(ddof=1)) / math.sqrt(len(v))
-        row = {k: five[0][k] for k in FIELDS}
+        row = {k: five[0].get(k) for k in FIELDS}
         row.update(
             ts=max(r["ts"] for r in five),
             value=round(mean, 4),
@@ -293,7 +298,8 @@ def unpaired(rows: Iterable[dict[str, Any]]) -> list[tuple]:
     aggregate without an N2 one, and the reverse (US-4.1)."""
     have: dict[str, set[tuple]] = {"N1": set(), "N2": set()}
     for r in rows:
-        if r.get("seed") is None and r.get("quotable") is True and r.get("number") in have:
+        current = r.get("seed") is None and not r.get("superseded")
+        if current and r.get("quotable") is True and r.get("number") in have:
             have[r["number"]].add((r["backbone_id"], r["res"], r["token_type"], r["head"]))
     return sorted(
         [(*k, "N2") for k in have["N1"] - have["N2"]]
@@ -340,9 +346,11 @@ def _order(r: dict[str, Any]) -> tuple:
 
 def render(rows: list[dict[str, Any]]) -> str:
     """n_table.md: one section per number; every aggregate row (seeds 0–4) and every per-seed
-    row that no aggregate covers, the split rule on every line."""
-    covered = {number_key(r) for r in rows if r.get("seed") is None}
-    shown = [r for r in rows if r.get("seed") is None or number_key(r) not in covered]
+    row that no aggregate covers, the split rule on every line. Superseded rows (US-8) are
+    left out and counted at the end."""
+    current = [r for r in rows if not r.get("superseded")]
+    covered = {number_key(r) for r in current if r.get("seed") is None}
+    shown = [r for r in current if r.get("seed") is None or number_key(r) not in covered]
     out = [
         "# N-table",
         "",
@@ -377,6 +385,26 @@ def render(rows: list[dict[str, Any]]) -> str:
                 f"| {seed} "
                 f"| {train} → {test} | {_metric(r)} | {_fmt(r['value'])} | {ci} "
                 f"| {_fmt(r['coverage'], 2)} | {r['n']} | `{r['split_rule']}` | {flag} |"
+            )
+    old: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        if r.get("superseded"):
+            old.setdefault(r["superseded"], []).append(r)
+    if old:
+        out += [
+            "",
+            "## Superseded",
+            "",
+            "These rows stay in `n_table.jsonl`, marked; they are left out above and out of the",
+            "verdict (spec 005 US-8).",
+            "",
+        ]
+        for reason, these in old.items():
+            aggs = sum(r["seed"] is None for r in these)
+            numbers = "/".join(sorted({r["number"] for r in these}))
+            out.append(
+                f"- {reason}: {numbers}, {aggs} aggregate row(s) and {len(these) - aggs} "
+                "per-seed row(s)"
             )
     return "\n".join(out) + "\n"
 

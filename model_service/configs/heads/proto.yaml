@@ -9,7 +9,8 @@ optimizer: adamw
 lr: 1.0e-3            # H8: 5e-4 - 1e-3
 weight_decay: 1.0e-4  # on the prototypes, not on tau
 batch_size: 256
-max_epochs: 50
+max_epochs: 300       # H8: 50; raised by the owner on 2026-09-19 (DECISIONS 80), so that
+                      # early stopping, not the cap, ends every run
 patience: 10
 loss: focal
 focal_gamma: 2.0

@@ -192,6 +192,7 @@ def rows_for(
             "model_version": meta["model_version"],
             "cache_key": bb["cache_key"],
             "quotable": quotable,
+            "superseded": None,
             "notes": notes,
         }
         for metric, value, n in score(y, pred, classes, metrics)

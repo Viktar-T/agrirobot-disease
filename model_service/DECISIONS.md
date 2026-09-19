@@ -1024,3 +1024,79 @@ verdict itself belongs to W4 and was not run.
         five-seed means. "Do not overlap" means the leader's `ci_low` lies above the other's
         `ci_high` (spec 005 US-2's 95 % t intervals).
     - Nothing computes the verdict yet. `verdict.md` and its tests come with the W4 task.
+
+## 2026-09-19 — W3 · max_epochs 300: the heads again, N1 and N2 again (the owner's decision)
+
+The owner's answer to 69: raise the cap, so that early stopping and not the cap ends every
+run. The heads at 224 were trained again, N1 and N2 scored again, and the guard-rail check run
+again. The 50-epoch rows stay in the N-table, marked superseded. The verdict (W4) reads the
+new runs.
+
+80. **`max_epochs` 300 for every head. The 50-epoch rows are kept and marked superseded.**
+    - `linear.yaml` and `proto.yaml` now say `max_epochs: 300`. H8 §6.5 says 50; H8 is the
+      owner's to update.
+    - lr 1e-3, patience 10 and early stopping on the in-domain validation split are
+      unchanged. `mix.yaml` has no epochs: a mix takes its components' weights.
+    - A changed config is a new run id (spec 003 FR-002). So 90 new runs were trained:
+      both backbones × Makerere, Tanzania and Makerere + iBean × three heads × five seeds.
+      That took 495 s of CPU, each run with its compute-log row. The old runs' folders stay
+      under `data/heads/`.
+    - **No run reached 300.** All 60 fitted runs ended by early stopping, the longest after
+      208 epochs.
+    - On Makerere and on Makerere + iBean, the linear heads now keep epochs 108–198 (the
+      longest being DINOv2's on Makerere + iBean). Their validation macro-F1 rose by about
+      0.007.
+    - The Tanzania heads and most proto runs stopped before 50 anyway, so they keep the same
+      best epoch and the same weights. Their numbers did not move.
+    - **Superseded, not deleted.** N-table rows gained a `superseded` field (spec 005 FR-001,
+      US-8). `python -m ms.eval.supersede` marked every row that names a run trained with the
+      50-epoch configs (linear `427816d6…`, proto `c20fb209…`) or a mix of one: 612 rows,
+      252 of N1 and 360 of N2, all with the same reason text. No other field changed; this
+      was checked row by row. The W2 slice's rows and the four N4 rows are not marked.
+    - The mark is part of what makes seeds one number, so old and new seeds never share an
+      aggregate. `unpaired`, `n_table.md`'s sections and the verdict read the current rows
+      only. The md counts the superseded ones at its end.
+    - The table's rule is now "never deleted, and never changed except for this mark"
+      (spec 005 edge cases).
+81. **What moved, and what did not.** `make eval` scored the 90 new runs: 612 new rows, all
+    quotable, and every N1/N2 pair complete.
+    - 18 of the 102 current aggregates differ from their superseded twins by 0.0005 or more.
+      All are in cells whose runs had been stopped at the cap: the linear heads, their
+      mixes, and DINOv2's proto on Makerere + iBean, whose seed 3 now keeps epoch 70.
+
+    | number | direction | backbone | head | macro-F1, 50 epochs | macro-F1, 300 cap |
+    |---|---|---|---|---|---|
+    | N1 | Makerere | `dinov2_l14_reg` | linear | 0.990 (0.989–0.991) | 0.991 (0.990–0.993) |
+    | N1 | Makerere | `dinov2_l14_reg` | mix | 0.994 (0.991–0.996) | 0.994 (0.992–0.997) |
+    | N1 | Makerere | `dinov3_l16` | linear | 0.988 (0.987–0.989) | 0.991 (0.990–0.993) |
+    | N2 | Makerere + iBean → Tanzania | `dinov2_l14_reg` | proto | 0.727 (0.651–0.803) | 0.733 (0.666–0.799) |
+    | N2 | Makerere + iBean → Tanzania | `dinov3_l16` | linear | 0.802 (0.794–0.810) | 0.876 (0.867–0.884) |
+    | N2 | Makerere + iBean → Tanzania | `dinov3_l16` | mix | 0.782 (0.736–0.829) | 0.813 (0.772–0.853) |
+
+    - The other 12 moves are recall rows, most of them in the same cells. The biggest is
+      DINOv3's linear head on Tanzania's healthy rows: 0.910 → 0.952. That means far fewer false rust calls,
+      which is where its N2 gain comes from.
+    - DINOv2's linear head on Makerere + iBean → Tanzania stays at 0.889. Longer training
+      moved its rust recall (0.980 → 0.981) but not its macro-F1.
+    - Unchanged: N1 on Tanzania and every Tanzania → X direction, because the Tanzania heads
+      stopped early before. Tables 72 and 75 hold for them.
+    - Between the backbones, the gap on Makerere + iBean → Tanzania narrowed. Linear is now
+      0.889 against 0.876, where it was 0.889 against 0.802. The verdict is W4's, by 79's
+      rules.
+82. **The guard-rail check again: N1 ≫ N2 still appears for every backbone and head.**
+
+    | backbone | head | N1 Makerere | N1 Tanzania | N2 T → M | N2 T → M rust crops (recall) | N2 T → iBean | N2 M + iBean → T |
+    |---|---|---|---|---|---|---|---|
+    | `dinov2_l14_reg` | linear | 0.991 | 0.994 | 0.362 | 0.475 | 0.545 | 0.889 |
+    | | proto | 0.993 | 0.996 | 0.365 | 0.417 | 0.525 | 0.733 |
+    | | mix | 0.994 | 0.995 | 0.363 | 0.435 | 0.527 | 0.861 |
+    | `dinov3_l16` | linear | 0.991 | 0.992 | 0.360 | 0.485 | 0.516 | 0.876 |
+    | | proto | 0.991 | 0.996 | 0.346 | 0.319 | 0.531 | 0.718 |
+    | | mix | 0.991 | 0.996 | 0.347 | 0.367 | 0.520 | 0.812 |
+
+    - Against the N1 of their own set, the N2 directions lose 0.10–0.65 macro-F1, and every
+      N1 interval lies above every N2 interval. No leakage hunt was triggered.
+    - The smallest gap is still DINOv2's linear head on Makerere + iBean → Tanzania, 0.102.
+      DINOv3's linear gap there fell from 0.186 to 0.116.
+    - The duplicate checks of 78 depend only on the frozen manifests, which have not changed,
+      so they hold as they were.

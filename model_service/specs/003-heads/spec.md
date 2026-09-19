@@ -103,7 +103,8 @@ Every N1–N3 number comes from a head trained on cached features, so a head run
   - `ms.heads.load_run(folder)` returns a `Run` whose `logits(x)` and `predict_proba(x)` score features.
 - **FR-006 Recipe.**
   - AdamW with the config's `lr` (H8 range 5e-4 to 1e-3) and weight decay 1e-4. Weight decay does not apply to `log_tau`.
-  - Batch 256, at most 50 epochs, early stopping after `patience` epochs without a better validation score.
+  - Batch 256, at most `max_epochs` epochs, early stopping after `patience` (10) epochs without a better validation score.
+  - `max_epochs` is 300. H8 says 50; the owner raised it on 2026-09-19 so that early stopping, not the cap, ends every run (Clarification 9).
   - The focal loss with γ = 2 against targets smoothed by 0.1; class-balanced sampling.
   - The epoch kept is the best by `select`.
 - **FR-007 Features.** Each token type (spec 002) is L2-normalised; `cls+meanpatch` joins the two normalised vectors (DECISIONS 34). The same `ms.heads.features` feeds training, the eval (005) and the service (006).
@@ -121,7 +122,7 @@ Every N1–N3 number comes from a head trained on cached features, so a head run
 
 ## Success criteria (measurable, technology-agnostic)
 
-- **SC-1** Both backbones at 224 have, on `makerere_v1` and on `tanzania_v1`, the three heads × five seeds: every run has its folder and its compute-log row (the W3 Heads task).
+- **SC-1** Both backbones at 224 have the three heads × five seeds on `makerere_v1`, on `tanzania_v1` and on `makerere_v1` + `ibean_v1` (N2): every run has its folder and its compute-log row (the W3 Heads and N2 tasks).
 - **SC-2** Re-running `make heads` with unchanged inputs does nothing and adds no row.
 - **SC-3** Every run folder has exactly one `train_head` row in the compute log. A deleted run's row stays (DECISIONS 34), so the reverse need not hold.
 - **SC-4** The CPU tests use synthetic manifests and caches, run in under one minute, and need neither network nor GPU.
@@ -145,7 +146,7 @@ Closed on 2026-09-19:
 7. **The defaults are the W3 protocol**: every head, seeds 0–4.
 8. **`run_json_version` 2 keeps every v1 key**, and adds `components` and the effective recipe. `trainer_version` 2 is an input, so v2 runs get new run ids; the slice's run is not quotable anyway.
 
-9. **The linear head's steps (closed on 2026-09-19, by measurement; DECISIONS 69).** On Makerere (27 steps per epoch) the linear head is still improving when the 50 epochs end: its best epoch is 50 for four seeds of five on both backbones. On Tanzania (307 steps per epoch) it stops by epoch 15. H8's recipe stays: 50 epochs, and lr 1e-3 is already the top of its range. A logit scale or more epochs would be a config change with new run ids, not a contract change, and it is the owner's call.
+9. **The linear head's steps (closed on 2026-09-19, by measurement; DECISIONS 69).** On Makerere (27 steps per epoch) the linear head is still improving when the 50 epochs end: its best epoch is 50 for four seeds of five on both backbones. On Tanzania (307 steps per epoch) it stops by epoch 15. H8's recipe stays: 50 epochs, and lr 1e-3 is already the top of its range. A logit scale or more epochs would be a config change with new run ids, not a contract change, and it is the owner's call. **The owner's decision of 2026-09-19:** `max_epochs` 300 for every head, with lr 1e-3, patience 10 and early stopping on the in-domain validation split unchanged, so that early stopping, not the cap, ends every run. The heads at 224 were trained again. The 50-epoch runs' rows stay in the N-table, marked superseded (spec 005 US-8; DECISIONS 80).
 
 10. **Training on several manifests (closed on 2026-09-19 by the owner).** N2's "Makerere + iBean → Tanzania" trains on Makerere's and iBean's train splits and stops early on their validation splits. The runs are quotable although iBean's role is `test_only` (US-5.1; spec 001 Clarification 10).
 11. **Anthracnose in N2 (closed on 2026-09-19 by the owner).** The Tanzania heads keep their three classes. N2 decides among the classes both sides have, healthy and rust, and scores only those rows (spec 005 US-7).

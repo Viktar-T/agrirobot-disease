@@ -19,6 +19,8 @@ from synthetic import BACKBONE, COUNTS, RES, make_manifest, rows_of, sha256
 
 import ms.eval as n_table
 from ms.eval import run as eval_run
+from ms.eval import supersede
+from ms.heads import HEAD_CONFIGS
 from ms.heads import train as heads_train
 
 A, B = "a" * 64, "b" * 64
@@ -37,7 +39,7 @@ def row(**changes) -> dict:
         "coverage": 1.0, "classes": ["healthy", "rust"],
         "run_id": "dinov2_l14_reg-224-linear-cls-s0-0123abcd",
         "model_version": "msv0.1+dinov2_l14_reg@224.linear.man-aaaaaa",
-        "cache_key": "2b017210105b0b1f", "quotable": True, "notes": None,
+        "cache_key": "2b017210105b0b1f", "quotable": True, "superseded": None, "notes": None,
     }  # fmt: skip
     base.update(changes)
     return {k: base[k] for k in n_table.FIELDS}
@@ -70,6 +72,7 @@ def reasons(problems: list[str]) -> set[str]:
         {"metric": "balanced_accuracy:dataset", "classes": ["ibean", "makerere", "tanzania"]},
         {"model_version": None, "notes": "one seed"},
         {"number": "N2", "test_split": "all", "split_rule": "unblocked:random_by_phash_group"},
+        {"superseded": "DECISIONS 80: max_epochs 50 -> 300"},
         {
             "number": "N3",
             "metric": "recall:unknown_als",
@@ -112,6 +115,8 @@ def test_a_complete_row_passes(changes):
         ({"classes": []}, "bad_value"),
         ({"quotable": "yes"}, "bad_value"),
         ({"ts": "yesterday"}, "bad_value"),
+        ({"superseded": ""}, "bad_value"),  # a mark names its reason
+        ({"superseded": True}, "bad_value"),
     ],
 )
 def test_a_row_that_breaks_the_schema_is_named(changes, reason):
@@ -367,6 +372,85 @@ def test_eval_scores_every_n2_direction_of_the_config(tmp_path, capsys):
     before = table.read_bytes()
     assert eval_run.main(argv) == 0
     assert table.read_bytes() == before
+
+
+# --- superseded rows (US-8) ---------------------------------------------------------------------
+
+
+def test_superseded_rows_leave_the_pairs_and_keep_their_own_aggregates():
+    """US-8.3: a mark is part of what makes seeds one number, and pairs read current rows."""
+    old = [dict(r, superseded="old recipe") for r in five(values=(0.5, 0.5, 0.5, 0.5, 0.5))]
+    new = [dict(r, run_id=f"new-s{r['seed']}") for r in five()]
+    aggs = n_table.aggregate(old + new)
+    assert sorted((a["superseded"] or "", a["value"]) for a in aggs) == [
+        ("", pytest.approx(0.8)),
+        ("old recipe", pytest.approx(0.5)),
+    ]
+    to_tanzania = {"number": "N2", "test_manifest": TANZANIA, "test_manifest_sha256": B}
+    n2_old = [dict(a, superseded="old recipe") for a in n_table.aggregate(five(**to_tanzania))]
+    current_n1 = [a for a in aggs if not a["superseded"]]
+    assert n_table.unpaired(current_n1 + n2_old) == [("dinov2_l14_reg", 224, "cls", "linear", "N2")]
+
+
+def test_supersede_marks_the_rows_of_a_replaced_recipe_and_keeps_them(tmp_path, capsys):
+    """US-8: after a recipe change, the old runs' rows stay, marked; the new runs make their
+    own rows and aggregates; the md and the pairs read the new ones."""
+    manifest = make_manifest(tmp_path)
+    configs, heads_root = tmp_path / "configs", tmp_path / "heads"
+    configs.mkdir()
+    table, md = tmp_path / "n_table.jsonl", tmp_path / "n_table.md"
+    recipe = yaml.safe_load((HEAD_CONFIGS / "linear.yaml").read_text(encoding="utf-8"))
+
+    def train(max_epochs: int) -> str:
+        path = configs / "linear.yaml"
+        path.write_text(yaml.safe_dump({**recipe, "max_epochs": max_epochs}), encoding="utf-8")
+        code = heads_train.main(
+            [
+                "--backbone", BACKBONE, "--res", str(RES), "--head", "linear",
+                "--train-manifest", str(manifest), "--config-dir", str(configs),
+                "--cache-root", str(tmp_path / "cache"), "--heads-root", str(heads_root),
+                "--compute-log", str(tmp_path / "log.jsonl"),
+            ]
+        )  # fmt: skip
+        assert code == 0, capsys.readouterr().out
+        return sha256(path)
+
+    evaluate = [
+        "--heads-root", str(heads_root), "--cache-root", str(tmp_path / "cache"),
+        "--manifest-root", str(tmp_path / "manifests"), "--config", str(tmp_path / "none.yaml"),
+        "--n-table", str(table), "--md", str(md), "--compute-log", str(tmp_path / "log.jsonl"),
+    ]  # fmt: skip
+    old_sha = train(5)
+    assert eval_run.main(evaluate) == 0
+    first = list(n_table.read_rows(table))
+    train(6)
+    reason = "test: max_epochs 5 -> 6"
+    supersede_argv = [
+        "--config-sha256", old_sha, "--reason", reason, "--heads-root", str(heads_root),
+        "--n-table", str(table), "--md", str(md),
+    ]  # fmt: skip
+    assert supersede.main(supersede_argv) == 0
+    marked = list(n_table.read_rows(table))
+    assert [dict(r, superseded=None) for r in marked] == first  # nothing else changed
+    assert {r["superseded"] for r in marked} == {reason}
+    assert eval_run.main(evaluate) == 0
+
+    rows = list(n_table.read_rows(table))
+    assert all(n_table.validate_row(r) == [] for r in rows)
+    old = [r for r in rows if r["superseded"]]
+    new = [r for r in rows if not r["superseded"]]
+    assert old == marked and len(new) == len(first)
+    old_runs = {i for r in old for i in r["run_id"].split("+")}
+    assert not old_runs & {i for r in new for i in r["run_id"].split("+")}
+    assert sum(r["seed"] is None for r in new) == 4  # macro-F1 and three recalls
+    text = md.read_text(encoding="utf-8")
+    assert text.split("## N1")[1].split("\n## ")[0].count("| 0–4 |") == 4
+    assert f"- {reason}: N1, 4 aggregate row(s) and 20 per-seed row(s)" in text
+
+    capsys.readouterr()
+    assert supersede.main(supersede_argv) == 0 and "0 row(s) marked" in capsys.readouterr().out
+    assert list(n_table.read_rows(table)) == rows
+    assert supersede.main([*supersede_argv[:1], "0" * 64, *supersede_argv[2:]]) == 2
 
 
 # --- the rendered table (US-5) ---------------------------------------------------------------

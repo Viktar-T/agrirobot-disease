@@ -199,7 +199,8 @@ def test_run_json_holds_the_contract(tmp_path, capsys):
     for trained in (lin, proto):
         assert trained["components"] is None
         assert trained["head_config"]["sampling"] == "class_balanced"
-        assert 1 <= trained["fit"]["best_epoch"] <= trained["fit"]["epochs_run"] <= 50
+        cap = trained["head_config"]["max_epochs"]
+        assert 1 <= trained["fit"]["best_epoch"] <= trained["fit"]["epochs_run"] <= cap
     assert proto["head_config"]["prototypes_per_class"] == 4
     assert proto["head_config"]["tau_init"] == pytest.approx(0.07)
     assert proto["fit"]["tau"] > 0 and proto["fit"]["tau"] != pytest.approx(0.07, abs=1e-6)
@@ -216,12 +217,14 @@ def test_run_json_holds_the_contract(tmp_path, capsys):
 
 
 def test_the_committed_configs_are_the_h8_recipe():
-    """FR-003: one file per head, with H8 6.5's values."""
+    """FR-003: one file per head, with H8 6.5's values; max_epochs is 300, not H8's 50, since
+    the owner's decision of 2026-09-19 (early stopping ends every run, not the cap)."""
     cfg = {h: yaml.safe_load((CONFIGS / f"{h}.yaml").read_text(encoding="utf-8")) for h in HEADS}
     for head in ("linear", "proto"):
         c = cfg[head]
         assert c["head"] == head and c["optimizer"] == "adamw" and 5e-4 <= c["lr"] <= 1e-3
-        assert (c["weight_decay"], c["batch_size"], c["max_epochs"]) == (1e-4, 256, 50)
+        assert (c["weight_decay"], c["batch_size"], c["max_epochs"]) == (1e-4, 256, 300)
+        assert c["patience"] == 10
         assert (c["loss"], c["focal_gamma"], c["label_smoothing"]) == ("focal", 2, 0.1)
         assert (c["sampling"], c["select"]) == ("class_balanced", "balanced_val_loss")
     assert (cfg["proto"]["prototypes_per_class"], cfg["proto"]["tau_init"]) == (4, 0.07)

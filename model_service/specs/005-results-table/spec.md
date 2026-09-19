@@ -1,6 +1,6 @@
 # Feature specification: 005 — Results table (the N-table)
 
-**Branch**: `005-results-table` · **Created**: 2026-09-19 · **Status**: Implemented 2026-09-19 with the W3 Heads task (`ms.eval`: row checks, aggregates, pairs, rendering; `ms.eval.run`: N1 per class) and the N2 task (US-7, `configs/eval.yaml`); acceptance tests in `model_service/tests/test_n_table.py` green (DECISIONS 68, 74). SC-2 met at 224 on 2026-09-19. The verdict (US-6) and its tests come with the W4 "Verdict" task.
+**Branch**: `005-results-table` · **Created**: 2026-09-19 · **Status**: Implemented 2026-09-19 with the W3 Heads task (`ms.eval`: row checks, aggregates, pairs, rendering; `ms.eval.run`: N1 per class) and the N2 task (US-7, `configs/eval.yaml`), and superseded rows with the owner's change of the head recipe (US-8, `ms.eval.supersede`); acceptance tests in `model_service/tests/test_n_table.py` green (DECISIONS 68, 74, 80). SC-2 met at 224 on 2026-09-19. The verdict (US-6) and its tests come with the W4 "Verdict" task.
 **Input**: H8 §6.7 (results), H9 §7 (the verdict, copied verbatim in US-6), `docs/piece4-work-plan.md` S4.5, the W3–W4 tasks and §4 (seeds; criteria written before the numbers), DECISIONS 36 (the provisional row) and 54 (the N4 row), specs 001 (split rules, hashes, freeze) and 003 (runs). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
 
 ## Why
@@ -50,14 +50,14 @@ Exit codes: 0; 2 on an input error or an invalid row, with nothing appended.
 
 ### US-4: The table's invariants (P1)
 
-1. **N1 and N2 come in pairs.** `unpaired(rows)` lists every (backbone_id, res, token_type, head) that has a quotable N1 aggregate but no quotable N2 aggregate, or the reverse, with the missing number. `make eval` prints the list, and the verdict (US-6) refuses to run while it is not empty.
+1. **N1 and N2 come in pairs.** `unpaired(rows)` lists every (backbone_id, res, token_type, head) that has a quotable N1 aggregate but no quotable N2 aggregate, or the reverse, with the missing number. Superseded rows are not counted (US-8). `make eval` prints the list, and the verdict (US-6) refuses to run while it is not empty.
 2. **N3 uses only held-out classes.** An N3 row's `test_split` is `holdout_unknown`, and its `classes` are held-out unknowns only (`unknown_als`, `unknown_wm`). Otherwise the reason is `n3_not_held_out`.
 3. **Quotable means frozen.** Given the frozen list (`FROZEN.jsonl`), every manifest hash of a quotable row appears in it (spec 001 SC-5). Otherwise the reason is `manifest_not_frozen`.
 
 ### US-5: The rendered table (P1)
 
 1. `n_table.md` is rendered from `n_table.jsonl` alone, with one section per number.
-2. It shows every aggregate row, with its seeds shown as `0–4`. It also shows every per-seed row that no aggregate covers, such as N4 and the W2 slice. The per-seed rows behind an aggregate stay in the `.jsonl`.
+2. It shows every aggregate row, with its seeds shown as `0–4`. It also shows every per-seed row that no aggregate covers, such as N4 and the W2 slice. The per-seed rows behind an aggregate stay in the `.jsonl`. Superseded rows are counted at the end, by reason, and not shown (US-8).
 3. It is rewritten only when its text changes, and never by hand.
 
 ### US-6: The verdict (P2; its code and tests come with the W4 "Verdict" task)
@@ -65,7 +65,7 @@ Exit codes: 0; 2 on an input error or an invalid row, with nothing appended.
 The rules are H9 §7's, copied verbatim below. H9 §7 was last changed on 2026-09-14, before any number existed (work plan §4). The owner settled its readings on 2026-09-19. Where H9 is silent or ambiguous, the reading is the one that keeps the champion, because "a tie goes to the champion" (DECISIONS 79).
 
 1. `make eval` writes `results/verdict.md` from the table alone, by code, and nobody edits it by hand.
-   - It reads the quotable aggregate rows at 224 px, CLS, coverage 1.0.
+   - It reads the quotable aggregate rows that are not superseded (US-8), at 224 px, CLS, coverage 1.0.
    - It refuses to run while `unpaired` lists anything (US-4.1).
 2. The champion is `dinov2_l14_reg` and the challenger `dinov3_l16`.
 3. **Criterion 1: N2.** The metric is macro-F1 on the shared classes, in the three directions: Tanzania → Makerere (frames), Tanzania → iBean, Makerere + iBean → Tanzania. The crop-level rows (rust recall) are reported, not counted. The challenger wins criterion 1 when, with each of the three heads, both hold:
@@ -112,22 +112,33 @@ Source: `D:\Life-OS\FUND-GRANT\30_projects\AgriRobot\05_sourses\10.03_dr_choroby
 4. **Given** a direction, **then** its rows are macro-F1 and one recall per class, or the metrics it names. The crop direction reports `recall:rust` only, because the crops hold no healthy class (DECISIONS 46).
 5. Validation, aggregates, pairs and rendering are as for N1. Running `make eval` again adds nothing.
 
+### US-8: Superseded rows (P1; the owner's decision of 2026-09-19)
+
+1. **Given** an owner's change of a head recipe (a changed `configs/heads/<head>.yaml`), **when** `python -m ms.eval.supersede --config-sha256 <old sha256> --reason <why>` runs, **then** every row that names a run trained with the old config, or a mix of one, gets `superseded = <why>`. An aggregate names its five runs.
+   - The rows stay. The mark is the only change a row ever gets.
+   - A row already marked keeps its mark. A row written before the field existed gets null.
+   - Running it again changes nothing.
+2. The new runs' rows are appended as usual, with `superseded = null`.
+3. The mark is not a per-seed field, so it is part of what makes seeds one number (US-2.1). Old and new seeds never share an aggregate.
+4. Superseded rows are left out of `unpaired`, out of `n_table.md`'s sections (the md counts them at its end), and out of the verdict.
+
 ### Edge cases
 
 - **Several manifests in one row.** Both manifest fields and both hash fields join their parts with `+` in the same order (N4, DECISIONS 54). `split_rule` joins the scored rows' distinct rules, sorted.
 - **Rounding.** `value`, `ci_low` and `ci_high` are rounded to 4 decimals.
-- **Append only.** Rows are appended by code and never edited in place. `make eval` never rewrites an existing row.
+- **Append only.** Rows are appended by code and never deleted, and `make eval` never rewrites an existing row. The one change a row may get later is its `superseded` mark, set by `ms.eval.supersede` (US-8).
 
 ## Requirements
 
 ### Functional
 
-- **FR-001 Fields**, in this order (DECISIONS 36): `ts`, `number`, `metric`, `value`, `ci_low`, `ci_high`, `n`, `backbone_id`, `res`, `token_type`, `head`, `seed`, `train_manifest`, `train_manifest_sha256`, `train_split`, `test_manifest`, `test_manifest_sha256`, `test_split`, `split_rule`, `coverage`, `classes`, `run_id`, `model_version`, `cache_key`, `quotable`, `notes`.
+- **FR-001 Fields**, in this order (DECISIONS 36): `ts`, `number`, `metric`, `value`, `ci_low`, `ci_high`, `n`, `backbone_id`, `res`, `token_type`, `head`, `seed`, `train_manifest`, `train_manifest_sha256`, `train_split`, `test_manifest`, `test_manifest_sha256`, `test_split`, `split_rule`, `coverage`, `classes`, `run_id`, `model_version`, `cache_key`, `quotable`, `superseded`, `notes`.
   - `ts` is `YYYY-MM-DDTHH:MM:SSZ`.
   - `value` is a finite number. `ci_low` and `ci_high` are both null or both numbers, with `ci_low ≤ ci_high`.
   - `n` is an integer ≥ 1, and `coverage` a number in (0, 1].
   - `seed` is an integer, or null for an aggregate.
   - `classes` is a non-empty list of strings, `quotable` a boolean, and `model_version` and `notes` strings or null.
+  - `superseded` is null, or the reason why the row's runs were replaced (US-8).
   - `test_split` is `test`, `holdout_unknown`, `all` (every row of a test-only target, N2) or `cv<k>`: no number is scored on a train or validation split of a manifest that trains.
   - A failure of these is `missing_field`, `bad_field_order`, `bad_hash` or `bad_value`.
 - **FR-002 Numbers.** N1 within-dataset, N2 cross-dataset, N3 unknown recall and AUROC, N4 site-prediction probe, N5 negative control (piece 5), N6 latency, N7 compute cost. Anything else is `bad_number`.
@@ -141,7 +152,7 @@ Source: `D:\Life-OS\FUND-GRANT\30_projects\AgriRobot\05_sourses\10.03_dr_choroby
   N3, S4.4, N6 and N7 add their names, with their tests, in their tasks. Anything else is `bad_metric`.
 - **FR-006 Aggregation.** As US-2 says: over exactly seeds 0–4, with a 95 % Student t interval.
 - **FR-007 Quotable.** A row is quotable only when its runs trained on `train_eval` manifests without `--allow-test-only` (spec 003) and its manifests are frozen. `n_table.md` marks the other rows "not quotable". The verdict reads quotable aggregates only.
-- **FR-008 API.** `ms.eval` exports `FIELDS`, `NUMBERS`, `IDENTITY`, `NTableError`, `validate_row(row, frozen=None) -> list[str]`, `read_rows`, `append_rows(rows, path, frozen=None)`, `aggregate(rows) -> list[dict]`, `unpaired(rows)`, `render` and `write_md`.
+- **FR-008 API.** `ms.eval` exports `FIELDS`, `NUMBERS`, `IDENTITY`, `NTableError`, `validate_row(row, frozen=None) -> list[str]`, `read_rows`, `append_rows(rows, path, frozen=None)`, `aggregate(rows) -> list[dict]`, `unpaired(rows)`, `render` and `write_md`. `python -m ms.eval.supersede` marks superseded rows (US-8).
 - **FR-009 Writers.** Rows are written only by code: `ms.eval.run` for N1, and later N2 and N3, and `ms.eval.probe` for N4. All of them go through `append_rows`.
 - **FR-010 N2 directions.** `configs/eval.yaml` lists them under `n2`. Each has `train` (the training manifests, as `<manifest>_v<N>`), `test` (the target), `split` (`test` or `all`), `classes` (the decision set, two trained classes at least) and optionally `metrics`. `ms.eval.run.decide(proba, classes, among)` is the decision of US-7.3.
 

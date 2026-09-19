@@ -488,6 +488,7 @@ def n4_row(plan: Plan, result: Result) -> dict[str, Any]:
         "model_version": None,
         "cache_key": plan.cache_key,
         "quotable": True,
+        "superseded": None,
         "notes": notes,
     }
 

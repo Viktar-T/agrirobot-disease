@@ -13,21 +13,21 @@ pipeline (for example the W2 slice, trained on a test-only manifest).
 | dinov2_l14_reg | 224 | cls | linear | 0 | ibean_v1 (train) → ibean_v1 (test) | macro_f1 | 0.977 | — | 1.00 | 172 | `unblocked:random_by_phash_group` | *not quotable* |
 | dinov2_l14_reg | 224 | cls | linear | 0 | ibean_v1 (train) → ibean_v1 (test) | recall:healthy | 0.965 | — | 1.00 | 85 | `unblocked:random_by_phash_group` | *not quotable* |
 | dinov2_l14_reg | 224 | cls | linear | 0 | ibean_v1 (train) → ibean_v1 (test) | recall:rust | 0.989 | — | 1.00 | 87 | `unblocked:random_by_phash_group` | *not quotable* |
-| dinov2_l14_reg | 224 | cls | linear | 0–4 | makerere_v1 (train) → makerere_v1 (test) | macro_f1 | 0.990 | 0.989–0.991 | 1.00 | 2015 | `blocked:district` |  |
+| dinov2_l14_reg | 224 | cls | linear | 0–4 | makerere_v1 (train) → makerere_v1 (test) | macro_f1 | 0.991 | 0.990–0.993 | 1.00 | 2015 | `blocked:district` |  |
 | dinov2_l14_reg | 224 | cls | linear | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:healthy | 0.995 | 0.994–0.996 | 1.00 | 1050 | `blocked:district` |  |
-| dinov2_l14_reg | 224 | cls | linear | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:rust | 0.985 | 0.983–0.987 | 1.00 | 965 | `blocked:district` |  |
-| dinov2_l14_reg | 224 | cls | mix | 0–4 | makerere_v1 (train) → makerere_v1 (test) | macro_f1 | 0.994 | 0.991–0.996 | 1.00 | 2015 | `blocked:district` |  |
+| dinov2_l14_reg | 224 | cls | linear | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:rust | 0.987 | 0.984–0.991 | 1.00 | 965 | `blocked:district` |  |
+| dinov2_l14_reg | 224 | cls | mix | 0–4 | makerere_v1 (train) → makerere_v1 (test) | macro_f1 | 0.994 | 0.992–0.997 | 1.00 | 2015 | `blocked:district` |  |
 | dinov2_l14_reg | 224 | cls | mix | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:healthy | 0.996 | 0.994–0.998 | 1.00 | 1050 | `blocked:district` |  |
-| dinov2_l14_reg | 224 | cls | mix | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:rust | 0.991 | 0.987–0.995 | 1.00 | 965 | `blocked:district` |  |
+| dinov2_l14_reg | 224 | cls | mix | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:rust | 0.992 | 0.987–0.998 | 1.00 | 965 | `blocked:district` |  |
 | dinov2_l14_reg | 224 | cls | proto | 0–4 | makerere_v1 (train) → makerere_v1 (test) | macro_f1 | 0.993 | 0.991–0.995 | 1.00 | 2015 | `blocked:district` |  |
 | dinov2_l14_reg | 224 | cls | proto | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:healthy | 0.994 | 0.990–0.997 | 1.00 | 1050 | `blocked:district` |  |
 | dinov2_l14_reg | 224 | cls | proto | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:rust | 0.993 | 0.988–0.998 | 1.00 | 965 | `blocked:district` |  |
-| dinov3_l16 | 224 | cls | linear | 0–4 | makerere_v1 (train) → makerere_v1 (test) | macro_f1 | 0.988 | 0.987–0.989 | 1.00 | 2015 | `blocked:district` |  |
-| dinov3_l16 | 224 | cls | linear | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:healthy | 0.993 | 0.991–0.994 | 1.00 | 1050 | `blocked:district` |  |
-| dinov3_l16 | 224 | cls | linear | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:rust | 0.983 | 0.980–0.987 | 1.00 | 965 | `blocked:district` |  |
-| dinov3_l16 | 224 | cls | mix | 0–4 | makerere_v1 (train) → makerere_v1 (test) | macro_f1 | 0.992 | 0.991–0.993 | 1.00 | 2015 | `blocked:district` |  |
-| dinov3_l16 | 224 | cls | mix | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:healthy | 0.990 | 0.988–0.991 | 1.00 | 1050 | `blocked:district` |  |
-| dinov3_l16 | 224 | cls | mix | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:rust | 0.994 | 0.991–0.996 | 1.00 | 965 | `blocked:district` |  |
+| dinov3_l16 | 224 | cls | linear | 0–4 | makerere_v1 (train) → makerere_v1 (test) | macro_f1 | 0.991 | 0.990–0.993 | 1.00 | 2015 | `blocked:district` |  |
+| dinov3_l16 | 224 | cls | linear | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:healthy | 0.994 | 0.992–0.996 | 1.00 | 1050 | `blocked:district` |  |
+| dinov3_l16 | 224 | cls | linear | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:rust | 0.989 | 0.987–0.991 | 1.00 | 965 | `blocked:district` |  |
+| dinov3_l16 | 224 | cls | mix | 0–4 | makerere_v1 (train) → makerere_v1 (test) | macro_f1 | 0.991 | 0.990–0.993 | 1.00 | 2015 | `blocked:district` |  |
+| dinov3_l16 | 224 | cls | mix | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:healthy | 0.989 | 0.988–0.991 | 1.00 | 1050 | `blocked:district` |  |
+| dinov3_l16 | 224 | cls | mix | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:rust | 0.994 | 0.992–0.996 | 1.00 | 965 | `blocked:district` |  |
 | dinov3_l16 | 224 | cls | proto | 0–4 | makerere_v1 (train) → makerere_v1 (test) | macro_f1 | 0.991 | 0.990–0.992 | 1.00 | 2015 | `blocked:district` |  |
 | dinov3_l16 | 224 | cls | proto | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:healthy | 0.988 | 0.985–0.992 | 1.00 | 1050 | `blocked:district` |  |
 | dinov3_l16 | 224 | cls | proto | 0–4 | makerere_v1 (train) → makerere_v1 (test) | recall:rust | 0.995 | 0.993–0.997 | 1.00 | 965 | `blocked:district` |  |
@@ -102,20 +102,20 @@ pipeline (for example the W2 slice, trained on a test-only manifest).
 | dinov3_l16 | 224 | cls | proto | 0–4 | tanzania_v1 (train) → makerere_v1 (test) | macro_f1 | 0.346 | 0.344–0.348 | 1.00 | 2015 | `blocked:district` |  |
 | dinov3_l16 | 224 | cls | proto | 0–4 | tanzania_v1 (train) → makerere_v1 (test) | recall:healthy | 1.000 | 1.000–1.000 | 1.00 | 1050 | `blocked:district` |  |
 | dinov3_l16 | 224 | cls | proto | 0–4 | tanzania_v1 (train) → makerere_v1 (test) | recall:rust | 0.003 | 0.001–0.005 | 1.00 | 965 | `blocked:district` |  |
-| dinov2_l14_reg | 224 | cls | linear | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | macro_f1 | 0.889 | 0.881–0.897 | 1.00 | 21059 | `blocked:date` |  |
-| dinov2_l14_reg | 224 | cls | linear | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:healthy | 0.960 | 0.956–0.964 | 1.00 | 19410 | `blocked:date` |  |
-| dinov2_l14_reg | 224 | cls | linear | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:rust | 0.980 | 0.979–0.981 | 1.00 | 1649 | `blocked:date` |  |
-| dinov2_l14_reg | 224 | cls | mix | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | macro_f1 | 0.861 | 0.843–0.879 | 1.00 | 21059 | `blocked:date` |  |
+| dinov2_l14_reg | 224 | cls | linear | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | macro_f1 | 0.889 | 0.878–0.901 | 1.00 | 21059 | `blocked:date` |  |
+| dinov2_l14_reg | 224 | cls | linear | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:healthy | 0.960 | 0.954–0.965 | 1.00 | 19410 | `blocked:date` |  |
+| dinov2_l14_reg | 224 | cls | linear | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:rust | 0.981 | 0.978–0.984 | 1.00 | 1649 | `blocked:date` |  |
+| dinov2_l14_reg | 224 | cls | mix | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | macro_f1 | 0.861 | 0.843–0.878 | 1.00 | 21059 | `blocked:date` |  |
 | dinov2_l14_reg | 224 | cls | mix | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:healthy | 0.949 | 0.941–0.957 | 1.00 | 19410 | `blocked:date` |  |
-| dinov2_l14_reg | 224 | cls | mix | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:rust | 0.958 | 0.935–0.981 | 1.00 | 1649 | `blocked:date` |  |
-| dinov2_l14_reg | 224 | cls | proto | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | macro_f1 | 0.727 | 0.651–0.803 | 1.00 | 21059 | `blocked:date` |  |
-| dinov2_l14_reg | 224 | cls | proto | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:healthy | 0.922 | 0.904–0.939 | 1.00 | 19410 | `blocked:date` |  |
-| dinov2_l14_reg | 224 | cls | proto | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:rust | 0.657 | 0.469–0.845 | 1.00 | 1649 | `blocked:date` |  |
-| dinov3_l16 | 224 | cls | linear | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | macro_f1 | 0.802 | 0.794–0.810 | 1.00 | 21059 | `blocked:date` |  |
-| dinov3_l16 | 224 | cls | linear | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:healthy | 0.910 | 0.905–0.915 | 1.00 | 19410 | `blocked:date` |  |
-| dinov3_l16 | 224 | cls | linear | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:rust | 0.993 | 0.993–0.993 | 1.00 | 1649 | `blocked:date` |  |
-| dinov3_l16 | 224 | cls | mix | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | macro_f1 | 0.782 | 0.736–0.829 | 1.00 | 21059 | `blocked:date` |  |
-| dinov3_l16 | 224 | cls | mix | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:healthy | 0.895 | 0.862–0.929 | 1.00 | 19410 | `blocked:date` |  |
+| dinov2_l14_reg | 224 | cls | mix | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:rust | 0.957 | 0.942–0.972 | 1.00 | 1649 | `blocked:date` |  |
+| dinov2_l14_reg | 224 | cls | proto | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | macro_f1 | 0.733 | 0.666–0.799 | 1.00 | 21059 | `blocked:date` |  |
+| dinov2_l14_reg | 224 | cls | proto | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:healthy | 0.918 | 0.898–0.939 | 1.00 | 19410 | `blocked:date` |  |
+| dinov2_l14_reg | 224 | cls | proto | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:rust | 0.687 | 0.555–0.818 | 1.00 | 1649 | `blocked:date` |  |
+| dinov3_l16 | 224 | cls | linear | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | macro_f1 | 0.876 | 0.867–0.884 | 1.00 | 21059 | `blocked:date` |  |
+| dinov3_l16 | 224 | cls | linear | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:healthy | 0.952 | 0.948–0.956 | 1.00 | 19410 | `blocked:date` |  |
+| dinov3_l16 | 224 | cls | linear | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:rust | 0.992 | 0.992–0.992 | 1.00 | 1649 | `blocked:date` |  |
+| dinov3_l16 | 224 | cls | mix | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | macro_f1 | 0.812 | 0.772–0.853 | 1.00 | 21059 | `blocked:date` |  |
+| dinov3_l16 | 224 | cls | mix | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:healthy | 0.916 | 0.890–0.942 | 1.00 | 19410 | `blocked:date` |  |
 | dinov3_l16 | 224 | cls | mix | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:rust | 0.992 | 0.991–0.993 | 1.00 | 1649 | `blocked:date` |  |
 | dinov3_l16 | 224 | cls | proto | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | macro_f1 | 0.718 | 0.652–0.783 | 1.00 | 21059 | `blocked:date` |  |
 | dinov3_l16 | 224 | cls | proto | 0–4 | makerere_v1+ibean_v1 (train) → tanzania_v1 (test) | recall:healthy | 0.857 | 0.803–0.910 | 1.00 | 19410 | `blocked:date` |  |
@@ -129,3 +129,10 @@ pipeline (for example the W2 slice, trained on a test-only manifest).
 | dinov3_l16 | 224 | cls | logreg | 0 | ibean_v1+makerere_v1+tanzania_v1 (train) → ibean_v1+makerere_v1+tanzania_v1 (test) | balanced_accuracy:dataset (chance 0.333) | 0.992 | 0.990–0.994 | 1.00 | 23246 | `blocked:date+blocked:district+unblocked:random_by_phash_group` |  |
 | dinov2_l14_reg | 224 | cls | logreg | 0 | makerere_v1 (cv5) → makerere_v1 (cv5) | balanced_accuracy:district (chance 0.083) | 0.767 | 0.749–0.787 | 1.00 | 10118 | `unblocked:5fold_by_phash_group` |  |
 | dinov3_l16 | 224 | cls | logreg | 0 | makerere_v1 (cv5) → makerere_v1 (cv5) | balanced_accuracy:district (chance 0.083) | 0.770 | 0.746–0.795 | 1.00 | 10118 | `unblocked:5fold_by_phash_group` |  |
+
+## Superseded
+
+These rows stay in `n_table.jsonl`, marked; they are left out above and out of the
+verdict (spec 005 US-8).
+
+- max_epochs 50 -> 300, the owner's decision of 2026-09-19: the 50-epoch runs: N1/N2, 102 aggregate row(s) and 510 per-seed row(s)
