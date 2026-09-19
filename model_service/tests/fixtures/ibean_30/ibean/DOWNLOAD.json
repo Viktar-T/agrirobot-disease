@@ -1,0 +1,69 @@
+{
+  "download_json_version": 1,
+  "dataset": "ibean",
+  "title": "Beans",
+  "source": {
+    "kind": "huggingface",
+    "record_id": "AI-Lab-Makerere/beans@27aa014ce09b193e1a6f58112d4a66e0eddb69c5",
+    "record_url": "https://huggingface.co/datasets/AI-Lab-Makerere/beans/tree/27aa014ce09b193e1a6f58112d4a66e0eddb69c5/data",
+    "api_url": "https://huggingface.co/api/datasets/AI-Lab-Makerere/beans/tree/27aa014ce09b193e1a6f58112d4a66e0eddb69c5/data",
+    "doi": null,
+    "version": "27aa014ce09b193e1a6f58112d4a66e0eddb69c5",
+    "published": "2024-01-03T12:06:51.000Z",
+    "publisher": "Hugging Face"
+  },
+  "licence": {
+    "id": "MIT",
+    "expected": "MIT",
+    "matches_expected": true,
+    "as_stated": {
+      "cardData.license": [
+        "mit"
+      ]
+    }
+  },
+  "attribution": "Makerere AI Lab (2020). iBean: bean leaf disease images (healthy, angular leaf spot, bean rust) [Data set]. MIT licence. https://github.com/AI-Lab-Makerere/ibean",
+  "creators": [
+    "AI-Lab-Makerere"
+  ],
+  "complete": true,
+  "files": [
+    {
+      "name": "train.zip",
+      "size": 143812152,
+      "url": "https://huggingface.co/datasets/AI-Lab-Makerere/beans/resolve/27aa014ce09b193e1a6f58112d4a66e0eddb69c5/data/train.zip",
+      "source_checksum": "sha256:284fe8456ce20687f4367ae7ad94a64577e7f9fde2c2c6b1c74340ab5dc82715",
+      "sha256": "284fe8456ce20687f4367ae7ad94a64577e7f9fde2c2c6b1c74340ab5dc82715",
+      "status": "verified",
+      "downloaded_at": "2026-09-18T11:15:30Z",
+      "local_mtime_ns": 1789730130338076600
+    },
+    {
+      "name": "validation.zip",
+      "size": 18504213,
+      "url": "https://huggingface.co/datasets/AI-Lab-Makerere/beans/resolve/27aa014ce09b193e1a6f58112d4a66e0eddb69c5/data/validation.zip",
+      "source_checksum": "sha256:90b7aa1c26d91d9afff07a30bbc67a5ea34f1f1397f068d8675be09d7d0c602d",
+      "sha256": "90b7aa1c26d91d9afff07a30bbc67a5ea34f1f1397f068d8675be09d7d0c602d",
+      "status": "verified",
+      "downloaded_at": "2026-09-18T11:15:35Z",
+      "local_mtime_ns": 1789730135569364500
+    },
+    {
+      "name": "test.zip",
+      "size": 17708541,
+      "url": "https://huggingface.co/datasets/AI-Lab-Makerere/beans/resolve/27aa014ce09b193e1a6f58112d4a66e0eddb69c5/data/test.zip",
+      "source_checksum": "sha256:ca67b15d960d1e2fd9d23fd8498ce86818ead90755c630a43baf19ec4af09312",
+      "sha256": "ca67b15d960d1e2fd9d23fd8498ce86818ead90755c630a43baf19ec4af09312",
+      "status": "verified",
+      "downloaded_at": "2026-09-18T11:15:39Z",
+      "local_mtime_ns": 1789730139846955100
+    }
+  ],
+  "notes": "The download links in the iBean README (storage.googleapis.com/ibeans/*.zip) return HTTP 403 (checked 2026-09-18). These are the same three archives from the lab's own Hugging Face repository, pinned to a commit. The README states 1,296 images; the Hugging Face card states 1,034 + 133 + 128 = 1,295.",
+  "checked_at": "2026-09-18T11:32:35Z",
+  "builder": {
+    "module": "ms.data.download",
+    "version": "0.0.1",
+    "git_sha": "e99ae98"
+  }
+}
