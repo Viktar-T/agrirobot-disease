@@ -1,7 +1,11 @@
 # --- Data and large artefacts: never in git ---
-# Local data root: everything under data/ except its README (DVC comes in W2, piece 3)
-/data/*
+# Local data root: everything under data/ except its README and the DVC pointer files
+# (data/manifests.dvc, data/cache.dvc: store/README.md, "Hand-over from piece 4").
+# `?*`, not `*`: DVC's git layer reads `/data/*` as ignoring data/ itself, and then never
+# finds the pointer files; for git the two patterns are the same.
+/data/?*
 !/data/README.md
+!/data/*.dvc
 # ROS 2 bags
 *.mcap
 *.db3

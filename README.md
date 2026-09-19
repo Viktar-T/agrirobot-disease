@@ -34,6 +34,6 @@ Secrets go in `.env` (git-ignored, copy of `.env.example`). The ROS 2 side of pi
 
 ## Conventions
 
-- No data, bags, model weights, MLflow runs or secrets in git (see `.gitignore`); datasets get DVC versioning in W2 (piece 3).
+- No data, bags, model weights, MLflow runs or secrets in git (see `.gitignore`). The manifests and feature caches are versioned with DVC from W2: git holds their pointers, `data/*.dvc` (see `store/README.md`).
 - Text files are LF in every checkout (see `.gitattributes`).
 - Team-facing documents are in English (H8 §12).

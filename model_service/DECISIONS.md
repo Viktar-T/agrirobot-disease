@@ -631,3 +631,25 @@ The work plan's "Fri — site-prediction probe (N4)", on the 224 caches of 52. `
     - Between the backbones, DINOv3 gives the set away slightly more (the intervals do not
       overlap), and the district is a tie. How N4 breaks a tie is for the verdict's rule
       (H9 §7, W4), not for this entry.
+
+## 2026-09-19 — W2 · manifests and caches under DVC, handed to piece 3
+
+The work plan's "Hand the manifest format to piece 3 for DVC". The task is P's; it was done at
+the owner's request, and what stays open for piece 3 is listed in `store/README.md`.
+
+57. **`dvc init` at the repository root, then `dvc add data/manifests data/cache`.**
+    - The pointers are `data/manifests.dvc` (11 files, 174 MB: the five frozen manifests,
+      their sidecars and `FROZEN.jsonl`) and `data/cache.dvc` (20 files, 1.40 GB: the ten
+      224 caches of 52). The DVC cache is the local `.dvc/cache/` (1.5 GB of copies; NTFS
+      has no reflinks).
+    - There is no remote: that is piece 3's decision. A remote that receives
+      `data/cache/dinov3_l16/` must be on the project's machines (13).
+    - DVC analytics are off (`core.analytics false` in `.dvc/config`), and every DVC command
+      here ran with `DVC_NO_ANALYTICS=1`, so nothing was sent.
+    - The root `.gitignore` now ignores `/data/?*` instead of `/data/*`, and lets
+      `data/*.dvc` through. For git the two patterns are the same. DVC's git layer
+      (scmrepo over dulwich) reads `/data/*` as ignoring `data/` itself: `dvc status` found
+      no pointer file ("no data tracked"), although `dvc add` had written both.
+    - The hand-over is a section of `store/README.md`. It gives both formats in short, with
+      pointers to specs 001 and 002, the DVC routine, and what stays open for piece 3: the
+      remote, and whether `data/raw/` and `data/derived/` go under DVC.
