@@ -73,7 +73,9 @@ make heads BB=dinov3_l16 RES=224 ARGS="--train-manifest data/manifests/tanzania_
 
 A call trains linear, proto and mix for seeds 0–4 unless `--head` and `--seed` say otherwise,
 and skips every run that already exists. Runs land in `data/heads/<run_id>/` (git-ignored),
-and each writes its seconds to the compute log. `make eval` then scores them into the N-table.
+and each writes its seconds to the compute log. `make eval` then scores them into the N-table:
+N1 on each run's own test split, and N2 on the cross-dataset directions of
+`configs/eval.yaml` (a run over two manifests takes `--train-manifest a.jsonl b.jsonl`).
 
 ## The site probe (N4)
 

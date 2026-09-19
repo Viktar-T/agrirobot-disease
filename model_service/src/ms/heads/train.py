@@ -1,7 +1,7 @@
 """Train heads on cached features (S4.3; specs/003-heads/spec.md).
 
     python -m ms.heads.train --backbone dinov2_l14_reg --res 224 \\
-        --train-manifest data/manifests/makerere_v1.jsonl [--split train]
+        --train-manifest data/manifests/makerere_v1.jsonl [<more manifests>] [--split train]
         [--head linear proto mix] [--seed 0 1 2 3 4] [--val-manifest <file>] [--val-split val]
         [--tokens cls] [--cache-key K] [--allow-test-only]
         [--cache-root data/cache] [--heads-root data/heads] [--config-dir configs/heads]
@@ -9,8 +9,10 @@
 
 One run per (head, seed); the defaults are the W3 protocol, every head for seeds 0-4. The
 train split is read with purpose=train and the validation split with purpose=select (spec
-001 FR-011), and the validation manifest is the training manifest itself (in domain). Every
-input is checked before the first run trains, so an input error writes nothing.
+001 FR-011), both from the training manifests themselves (in domain). Several training
+manifests (N2's Makerere + iBean) are read side by side: the first one's role decides, and
+a further one may be test_only. Every input is checked before the first run trains, so an
+input error writes nothing.
 
 linear and proto are fitted with the recipe of configs/heads/<head>.yaml: AdamW, focal loss
 with label smoothing, class-balanced sampling, early stopping on the validation split's
@@ -353,15 +355,43 @@ def load_config(config_dir: Path, head: str) -> tuple[Path, dict[str, Any]]:
 
 
 @dataclass
+class Side:
+    """The training or the validation side of a call: its manifests, their caches and the
+    split read. Several manifests (N2's Makerere + iBean) join with + (spec 003 FR-004)."""
+
+    manifests: list[Manifest]
+    npzs: list[Path]
+    split: str
+
+    @property
+    def sha256(self) -> str:
+        return "+".join(m.sha256 for m in self.manifests)
+
+    def record(self, classes: list[str]) -> dict[str, Any]:
+        """run.json's `train` or `val`."""
+        rows = [r for m in self.manifests for r in m.rows]
+        roles = [(m.meta or {}).get("role") for m in self.manifests]
+        return {
+            "manifest": "+".join(repo_relative(m.path) for m in self.manifests),
+            "manifest_sha256": self.sha256,
+            "frozen": all(m.frozen for m in self.manifests),
+            "role": roles[0] if len(roles) == 1 else "+".join(map(str, roles)),
+            "split": self.split,
+            "split_rules": sorted({r["split_rule"] for r in rows}),
+            "n": sum(1 for r in rows if r["class_km2"] in classes),
+            "class_counts": dict(sorted(Counter(r["class_km2"] for r in rows).items())),
+            "cache": "+".join(repo_relative(p) for p in self.npzs),
+        }
+
+
+@dataclass
 class Inputs:
     """What every run of one call shares, read and checked once (spec 003 FR-008)."""
 
-    train_m: Manifest
-    val_m: Manifest
+    train: Side
+    val: Side
     role: str | None
     classes: list[str]
-    train_npz: Path
-    val_npz: Path
     cache_meta: dict[str, Any]
     x: np.ndarray
     y: np.ndarray
@@ -370,99 +400,113 @@ class Inputs:
 
     @property
     def quotable(self) -> bool:
+        """The first training manifest decides (spec 003 US-5.1)."""
         return self.role == "train_eval"
+
+    @property
+    def dataset(self) -> str:
+        return "+".join(m.rows[0]["dataset"] for m in self.train.manifests)
 
 
 def read_inputs(args: argparse.Namespace, heads: list[str], configs: dict) -> Inputs:
+    paths = list(dict.fromkeys(args.train_manifest))
     try:
-        train_m = load_manifest(args.train_manifest, args.split, "train")
-        val_m = load_manifest(args.val_manifest or args.train_manifest, args.val_split, "select")
+        train_ms = [load_manifest(p, args.split, "train") for p in paths]
+        val_ms = [load_manifest(p, args.val_split, "select") for p in paths]
+        chosen = (
+            load_manifest(args.val_manifest, args.val_split, "select")
+            if args.val_manifest
+            else None
+        )
     except TestSplitAccessError as exc:
         raise TrainError("test_split_access", str(exc)) from None
     except FrozenManifestModified as exc:
         raise TrainError("frozen_manifest_modified", str(exc)) from None
     except FileNotFoundError as exc:
         raise TrainError("missing_file", str(exc)) from None
-    if val_m.sha256 != train_m.sha256:
-        raise TrainError(
-            "val_not_in_domain",
-            f"{val_m.path.name} is not the training manifest {train_m.path.name}: early "
-            "stopping reads the training manifest's own validation split (spec 003 US-3.2)",
-        )
-    role = (train_m.meta or {}).get("role")
-    if role == "holdout_unknown" or (role != "train_eval" and not args.allow_test_only):
+    names = ", ".join(m.path.name for m in train_ms)
+    if chosen is not None:
+        val_ms = [m for m in val_ms if m.sha256 == chosen.sha256]
+        if not val_ms:
+            raise TrainError(
+                "val_not_in_domain",
+                f"{chosen.path.name} is not a training manifest ({names}): early stopping reads "
+                "the training manifests' own validation splits (spec 003 US-3.2)",
+            )
+    roles = [(m.meta or {}).get("role") for m in train_ms]
+    if roles[0] == "holdout_unknown" or (roles[0] != "train_eval" and not args.allow_test_only):
         raise TrainError(
             "role_not_trainable",
-            f"{train_m.path.name} has role {role!r} (spec 001 FR-001): heads train on train_eval "
-            "manifests; --allow-test-only trains on a test_only one for the W2 slice, never quoted",
+            f"{train_ms[0].path.name} has role {roles[0]!r} (spec 001 FR-001): heads train on "
+            "train_eval manifests; --allow-test-only trains on a test_only one for the W2 slice, "
+            "never quoted",
         )
-    strays = sorted({r["class_km2"] for r in train_m.rows} - set(TRAINED))
+    for m, role in zip(train_ms[1:], roles[1:], strict=True):
+        if role not in ("train_eval", "test_only"):
+            raise TrainError(
+                "role_not_trainable",
+                f"{m.path.name} has role {role!r}: a further training manifest is train_eval or "
+                "test_only (spec 003 US-5.1)",
+            )
+    rows = [r for m in train_ms for r in m.rows]
+    strays = sorted({r["class_km2"] for r in rows} - set(TRAINED))
     if strays:
-        raise TrainError(
-            "bad_value", f"{train_m.path.name} {args.split}: untrainable classes {strays}"
-        )
-    classes = [c for c in TRAINED if any(r["class_km2"] == c for r in train_m.rows)]
+        raise TrainError("bad_value", f"{names} {args.split}: untrainable classes {strays}")
+    classes = [c for c in TRAINED if any(r["class_km2"] == c for r in rows)]
     if len(classes) < 2:
-        raise TrainError(
-            "bad_value", f"{train_m.path.name} {args.split} holds {classes}: two classes at least"
-        )
-    val_rows = [r for r in val_m.rows if r["class_km2"] in classes]
-    missing = [c for c in classes if not any(r["class_km2"] == c for r in val_rows)]
+        raise TrainError("bad_value", f"{names} {args.split} hold {classes}: two classes at least")
+    val_rows = [[r for r in m.rows if r["class_km2"] in classes] for m in val_ms]
+    present = {r["class_km2"] for part in val_rows for r in part}
+    missing = [c for c in classes if c not in present]
     if missing:
-        raise TrainError(
-            "bad_value", f"{val_m.path.name} {args.val_split} has no rows of {missing}"
-        )
+        raise TrainError("bad_value", f"{names} {args.val_split} have no rows of {missing}")
     if "proto" in heads:
         k = configs["proto"][1]["prototypes_per_class"]
-        counts = Counter(r["class_km2"] for r in train_m.rows)
+        counts = Counter(r["class_km2"] for r in rows)
         few = {c: counts[c] for c in classes if counts[c] < k}
         if few:
             raise TrainError(
-                "too_few_rows", f"{train_m.path.name} {args.split}: {few} train rows, fewer than "
-                f"the {k} prototypes per class of proto",
+                "too_few_rows", f"{names} {args.split}: {few} train rows, fewer than the {k} "
+                "prototypes per class of proto",
             )  # fmt: skip
 
+    caches, npzs = {}, {}
     try:
-        train_npz = find_cache(
-            args.cache_root, args.backbone, args.res, train_m.name, train_m.sha256,
-            key=args.cache_key,
-        )  # fmt: skip
-        val_npz = find_cache(
-            args.cache_root, args.backbone, args.res, val_m.name, val_m.sha256, key=args.cache_key
-        )
-        train_cache = load_cache(train_npz, train_m.sha256)
-        val_cache = train_cache if val_npz == train_npz else load_cache(val_npz, val_m.sha256)
+        for m in train_ms:
+            npzs[m.sha256] = find_cache(
+                args.cache_root, args.backbone, args.res, m.name, m.sha256, key=args.cache_key
+            )
+            caches[m.sha256] = load_cache(npzs[m.sha256], m.sha256)
     except (FileNotFoundError, CacheMismatchError) as exc:
         raise TrainError("missing_cache", str(exc)) from None
-    if train_cache.meta["cache_key"] != val_cache.meta["cache_key"]:
+    keys = {c.meta["cache_key"] for c in caches.values()}
+    if len(keys) > 1:
         raise TrainError(
-            "missing_cache", "train and validation features come from different cache keys"
+            "missing_cache", f"the training manifests' features come from cache keys {sorted(keys)}"
         )
 
-    def matrix(cache, rows):
-        where = {str(i): k for k, i in enumerate(cache.image_id)}
-        index = np.array([where[r["image_id"]] for r in rows])
-        y = np.array([classes.index(r["class_km2"]) for r in rows], dtype=np.int64)
-        return features(cache, index, args.tokens), y
+    def matrix(parts):
+        xs, ys = [], []
+        for m, part in parts:
+            cache = caches[m.sha256]
+            where = {str(i): k for k, i in enumerate(cache.image_id)}
+            xs.append(features(cache, np.array([where[r["image_id"]] for r in part]), args.tokens))
+            ys.append(np.array([classes.index(r["class_km2"]) for r in part], dtype=np.int64))
+        return np.concatenate(xs), np.concatenate(ys)
 
-    x, y = matrix(train_cache, train_m.rows)
-    xv, yv = matrix(val_cache, val_rows)
-    return Inputs(train_m, val_m, role, classes, train_npz, val_npz, train_cache.meta, x, y, xv, yv)
-
-
-def _split_side(manifest: Manifest, split: str, cache_path: Path, classes: list[str]) -> dict:
-    rows = manifest.rows
-    return {
-        "manifest": repo_relative(manifest.path),
-        "manifest_sha256": manifest.sha256,
-        "frozen": manifest.frozen,
-        "role": (manifest.meta or {}).get("role"),
-        "split": split,
-        "split_rules": sorted({r["split_rule"] for r in rows}),
-        "n": sum(1 for r in rows if r["class_km2"] in classes),
-        "class_counts": dict(sorted(Counter(r["class_km2"] for r in rows).items())),
-        "cache": repo_relative(cache_path),
-    }
+    x, y = matrix([(m, m.rows) for m in train_ms])
+    xv, yv = matrix(list(zip(val_ms, val_rows, strict=True)))
+    return Inputs(
+        Side(train_ms, [npzs[m.sha256] for m in train_ms], args.split),
+        Side(val_ms, [npzs[m.sha256] for m in val_ms], args.val_split),
+        roles[0],
+        classes,
+        next(iter(caches.values())).meta,
+        x,
+        y,
+        xv,
+        yv,
+    )
 
 
 # --- the runs -----------------------------------------------------------------------------------
@@ -486,8 +530,8 @@ def run_identity(
         "tokens": args.tokens,
         "head_config_sha256": cfg_sha,
         "seed": seed,
-        "train": [inp.train_m.sha256, args.split],
-        "val": [inp.val_m.sha256, args.val_split],
+        "train": [inp.train.sha256, args.split],
+        "val": [inp.val.sha256, args.val_split],
     }
     if components is not None:
         inputs["components"] = [c["run_id"] for c in components]
@@ -530,7 +574,7 @@ def train_run(
         "seed": seed,
         "classes": inp.classes,
         "input_dim": int(inp.x.shape[1]),
-        "model_version": model_version(args.backbone, args.res, head, inp.train_m.sha256),
+        "model_version": model_version(args.backbone, args.res, head, inp.train.sha256),
         "quotable": inp.quotable,
         "allow_test_only": bool(args.allow_test_only),
         "backbone": {
@@ -544,8 +588,8 @@ def train_run(
             "revision": bb["revision"],
             "research_only_until_c5": bb["research_only_until_c5"],
         },
-        "train": _split_side(inp.train_m, args.split, inp.train_npz, inp.classes),
-        "val": _split_side(inp.val_m, args.val_split, inp.val_npz, inp.classes),
+        "train": inp.train.record(inp.classes),
+        "val": inp.val.record(inp.classes),
         "head_config": head_config,
         "fit": {**summary, "history": history},
         "components": components,
@@ -595,7 +639,7 @@ def train_run(
         step="train_head",
         backbone_id=args.backbone,
         res=args.res,
-        dataset=inp.train_m.rows[0]["dataset"],
+        dataset=inp.dataset,
         n_images_or_runs=1,
         wallclock_s=wallclock,
         device=run["device"],
@@ -621,11 +665,11 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="python -m ms.heads.train", description=__doc__.split("\n")[0])
     p.add_argument("--backbone", required=True)
     p.add_argument("--res", type=int, required=True)
-    p.add_argument("--train-manifest", type=Path, required=True)
+    p.add_argument("--train-manifest", type=Path, nargs="+", required=True)
     p.add_argument("--split", default="train")
     p.add_argument("--head", nargs="+", choices=tuple(HEADS), default=list(DEFAULT_HEADS))
     p.add_argument("--seed", nargs="+", type=int, default=list(DEFAULT_SEEDS))
-    p.add_argument("--val-manifest", type=Path, default=None, help="default: the train manifest")
+    p.add_argument("--val-manifest", type=Path, default=None, help="default: every one")
     p.add_argument("--val-split", default="val")
     p.add_argument("--tokens", default="cls", choices=TOKEN_SPECS)
     p.add_argument("--cache-key", default=None, help="when several caches of a manifest match")

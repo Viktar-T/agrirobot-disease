@@ -76,6 +76,9 @@ T_975_4 = 2.776445
 #: the fields in which the seeds of one number differ (US-2.1)
 PER_SEED = ("ts", "value", "ci_low", "ci_high", "seed", "run_id", "quotable", "notes")
 
+#: the splits a number is scored on (FR-001): a test split, the held-out unknowns, or every row
+#: of a test-only target (N2's iBean); cross-validation folds are cv<k>
+SCORED = ("test", HOLDOUT, "all")
 CV_RULE = re.compile(r"unblocked:[1-9][0-9]*fold_by_phash_group")
 CV_SPLIT = re.compile(r"cv[1-9][0-9]*")
 HEX64 = re.compile(r"[0-9a-f]{64}")
@@ -186,7 +189,7 @@ def validate_row(row: dict[str, Any], frozen: set[str] | None = None) -> list[st
         if not ok:
             bad("bad_hash", f"{side}_manifest_sha256")
     split = row["test_split"]
-    if not (split in ("test", HOLDOUT) or (isinstance(split, str) and CV_SPLIT.fullmatch(split))):
+    if not (split in SCORED or (isinstance(split, str) and CV_SPLIT.fullmatch(split))):
         bad("bad_value", "test_split")
     if not split_rule_ok(row["split_rule"]):
         bad("bad_split_rule", "split_rule")

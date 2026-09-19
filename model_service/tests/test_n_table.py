@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import json
 import math
+from pathlib import Path
 
 import numpy as np
 import pytest
-from synthetic import BACKBONE, RES, make_manifest, rows_of, sha256
+import yaml
+from synthetic import BACKBONE, COUNTS, RES, make_manifest, rows_of, sha256
 
 import ms.eval as n_table
 from ms.eval import run as eval_run
@@ -67,6 +69,7 @@ def reasons(problems: list[str]) -> set[str]:
         {"metric": "recall:rust", "n": 40},
         {"metric": "balanced_accuracy:dataset", "classes": ["ibean", "makerere", "tanzania"]},
         {"model_version": None, "notes": "one seed"},
+        {"number": "N2", "test_split": "all", "split_rule": "unblocked:random_by_phash_group"},
         {
             "number": "N3",
             "metric": "recall:unknown_als",
@@ -272,6 +275,98 @@ def test_eval_writes_macro_f1_and_every_class_recall_per_seed_and_their_aggregat
     before = table.read_bytes(), md.read_bytes()
     assert eval_run.main(argv) == 0
     assert (table.read_bytes(), md.read_bytes()) == before
+
+
+# --- N2 from head runs (US-7) -----------------------------------------------------------------
+
+
+def test_the_decision_is_among_the_directions_classes_only():
+    """US-7.3: a 3-class head scored on a 2-class target decides between those two."""
+    proba = np.array([[0.1, 0.3, 0.6], [0.5, 0.2, 0.3], [0.2, 0.1, 0.7]])
+    head = ["healthy", "rust", "anthracnose"]
+    assert eval_run.decide(proba, head, ["healthy", "rust"]).tolist() == [1, 0, 0]
+    with pytest.raises(ValueError, match="anthracnose"):
+        eval_run.decide(proba[:, :2], ["healthy", "rust"], ["healthy", "anthracnose"])
+
+
+def test_eval_scores_every_n2_direction_of_the_config(tmp_path, capsys):
+    """US-7: alpha (three classes) -> beta (its test split), -> gamma (rust only: recall), ->
+    delta (test-only: every row); beta + delta (two classes) -> alpha, without anthracnose."""
+    two = {s: {c: n for c, n in per.items() if c != "anthracnose"} for s, per in COUNTS.items()}
+    alpha = make_manifest(tmp_path, "alpha")
+    beta = make_manifest(tmp_path, "beta", seed=1, counts=two)
+    gamma = make_manifest(tmp_path, "gamma", seed=2, counts={"test": {"rust": 12}})
+    delta = make_manifest(tmp_path, "delta", role="test_only", seed=3, counts=two)
+    heads_root = tmp_path / "heads"
+    for manifests in ((alpha,), (beta, delta)):
+        code = heads_train.main(
+            [
+                "--backbone", BACKBONE, "--res", str(RES), "--head", "linear",
+                "--train-manifest", *map(str, manifests), "--cache-root", str(tmp_path / "cache"),
+                "--heads-root", str(heads_root), "--compute-log", str(tmp_path / "log.jsonl"),
+            ]
+        )  # fmt: skip
+        assert code == 0, capsys.readouterr().out
+    config = tmp_path / "eval.yaml"
+    shared = ["healthy", "rust"]
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "n2": [
+                    {"train": ["alpha_v1"], "test": "beta_v1", "split": "test", "classes": shared},
+                    {"train": ["alpha_v1"], "test": "gamma_v1", "split": "test", "classes": shared,
+                     "metrics": ["recall:rust"]},
+                    {"train": ["alpha_v1"], "test": "delta_v1", "split": "all", "classes": shared},
+                    {"train": ["beta_v1", "delta_v1"], "test": "alpha_v1", "split": "test",
+                     "classes": shared},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )  # fmt: skip
+    table = tmp_path / "n_table.jsonl"
+    argv = [
+        "--heads-root", str(heads_root), "--cache-root", str(tmp_path / "cache"),
+        "--manifest-root", str(tmp_path / "manifests"), "--config", str(config),
+        "--n-table", str(table), "--md", str(tmp_path / "n_table.md"),
+        "--compute-log", str(tmp_path / "log.jsonl"),
+    ]  # fmt: skip
+    assert eval_run.main(argv) == 0, capsys.readouterr().out
+    rows = list(n_table.read_rows(table))
+    assert all(n_table.validate_row(r) == [] for r in rows)
+    n2 = [r for r in rows if r["number"] == "N2" and r["seed"] is not None]
+    by_target = {}
+    for r in n2:
+        by_target.setdefault(Path(r["test_manifest"]).stem, []).append(r)
+    metrics = lambda target: sorted({r["metric"] for r in by_target[target]})  # noqa: E731
+    assert metrics("beta_v1") == metrics("delta_v1") == metrics("alpha_v1") == [
+        "macro_f1", "recall:healthy", "recall:rust",
+    ]  # fmt: skip
+    assert metrics("gamma_v1") == ["recall:rust"]
+    assert all(r["classes"] == shared and r["quotable"] for r in n2)
+
+    def n_of(manifest, split, klass=None):
+        return sum(
+            (split == "all" or r["split"] == split)
+            and r["class_km2"] in ([klass] if klass else shared)
+            for r in rows_of(manifest)
+        )
+
+    for r in n2:
+        target = {"beta_v1": beta, "gamma_v1": gamma, "delta_v1": delta, "alpha_v1": alpha}
+        manifest = target[Path(r["test_manifest"]).stem]
+        split = "all" if manifest == delta else "test"
+        assert r["test_split"] == split
+        assert r["n"] == n_of(manifest, split, r["metric"].partition(":")[2] or None)
+    assert {r["train_manifest_sha256"] for r in by_target["alpha_v1"]} == {
+        f"{sha256(beta)}+{sha256(delta)}"
+    }
+    aggs = [r for r in rows if r["number"] == "N2" and r["seed"] is None]
+    assert len(aggs) == 3 + 1 + 3 + 3  # beta, gamma, delta, alpha
+    assert n_table.unpaired(rows) == []  # alpha's N1 and N2 pair up
+    before = table.read_bytes()
+    assert eval_run.main(argv) == 0
+    assert table.read_bytes() == before
 
 
 # --- the rendered table (US-5) ---------------------------------------------------------------

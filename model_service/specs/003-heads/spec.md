@@ -11,7 +11,7 @@ Every N1–N3 number comes from a head trained on cached features, so a head run
 
 `python -m ms.heads.train`; `make heads BB=<backbone_id> RES=<res> ARGS="--train-manifest <file>"` runs it.
 
-    --backbone <id> --res <n> --train-manifest <file.jsonl> [--split train]
+    --backbone <id> --res <n> --train-manifest <file.jsonl> [<file.jsonl> ...] [--split train]
     [--head linear|proto|mix ...] [--seed N ...] [--val-manifest <file.jsonl>] [--val-split val]
     [--tokens cls|meanpatch|cls+meanpatch] [--cache-key K] [--allow-test-only]
     [--cache-root data/cache] [--heads-root data/heads] [--config-dir model_service/configs/heads]
@@ -41,7 +41,7 @@ Every N1–N3 number comes from a head trained on cached features, so a head run
 ### US-3: Only the in-domain validation split steers training (P1)
 
 1. **Given** any run, **then** the train rows are read with `purpose = train` and the validation rows with `purpose = select` (spec 001 FR-011). `--split` or `--val-split` naming `test` or `holdout_unknown` exits 2 with `test_split_access`, and nothing is written.
-2. **Given** `--val-manifest` naming a manifest other than the training manifest (by sha256), **then** the run exits 2 with `val_not_in_domain`. The default is the training manifest.
+2. **Given** `--val-manifest` naming a manifest that is not a training manifest (by sha256), **then** the run exits 2 with `val_not_in_domain`. The default is every training manifest's own validation split.
 3. **Given** a run, **then** early stopping and the epoch kept read only the validation split's rows of the head's classes. The score is the cross-entropy averaged per class, ties broken by macro-F1, with `patience` epochs (DECISIONS 34).
 4. **Given** a cache whose test and held-out rows carry other features, **then** every head trains the same weights as before.
 
@@ -53,7 +53,9 @@ Every N1–N3 number comes from a head trained on cached features, so a head run
 ### US-5: Roles (P1)
 
 1. A `train_eval` manifest trains, and the run is quotable. A `test_only` manifest trains only with `--allow-test-only`, and the run is marked not quotable (DECISIONS 35). A `holdout_unknown` manifest never trains. The refusals exit 2 with `role_not_trainable`.
-2. The head's classes are the trained classes (`healthy`, `rust`, `anthracnose`, in that order) present in the train split. Fewer than two classes, or a class with no validation rows, is `bad_value`. For proto, a class with fewer than K train rows is `too_few_rows`.
+   - **Several training manifests** (N2's Makerere + iBean → Tanzania; the owner's decision of 2026-09-19). The first manifest's role decides, as above. A further one may be `train_eval` or `test_only`, and never `holdout_unknown`.
+   - Each manifest trains on its `--split` rows and validates on its own `--val-split` rows.
+2. The head's classes are the trained classes (`healthy`, `rust`, `anthracnose`, in that order) present in the train split (of every training manifest). Fewer than two classes, or a class with no validation rows, is `bad_value`. For proto, a class with fewer than K train rows is `too_few_rows`.
 
 ### US-6: Seconds per run (P1, N7)
 
@@ -78,7 +80,7 @@ Every N1–N3 number comes from a head trained on cached features, so a head run
 - **FR-001 Location.** A run is `data/heads/<run_id>/` with `head.pt` and `run.json`. It is git-ignored, because heads on DINOv3 features are research-only (DECISIONS 13, 34). The folder is written under a temporary name and renamed when complete.
 - **FR-002 Run id.** `<backbone_id>-<res>-<head>-<tokens, + as _>-s<seed>-<hash8>`. `hash8` is the first 8 hex digits of the sha256 of `json.dumps(inputs, sort_keys=True)`, where `inputs` holds:
   - `trainer_version`, `backbone_id`, `res`, `cache_key`, `tokens`, `head_config_sha256`, `seed`;
-  - `train` and `val`, each as `[manifest sha256, split]`;
+  - `train` and `val`, each as `[manifest sha256, split]`, with several manifests' sha256s joined by `+`;
   - for mix, the components' run ids.
 - **FR-003 Configs.** One file per head in `configs/heads/` (`linear.yaml`, `proto.yaml`, `mix.yaml`).
   - The recipe keys are `head`, `optimizer`, `lr`, `weight_decay`, `batch_size`, `max_epochs`, `patience`, `loss`, `focal_gamma`, `label_smoothing`, `sampling` and `select`.
@@ -87,7 +89,7 @@ Every N1–N3 number comes from a head trained on cached features, so a head run
 - **FR-004 `run.json`** (`run_json_version = 2`). Its keys, in this order:
   - `run_json_version`, `run_id`, `head`, `tokens`, `seed`, `classes`, `input_dim`, `model_version`, `quotable`, `allow_test_only`;
   - `backbone`: `backbone_id`, `res`, `cache_key`, `weights_sha256`, `preprocess_string`, `compute_dtype`, `hf_id`, `revision`, `research_only_until_c5`;
-  - `train` and `val`: `manifest`, `manifest_sha256`, `frozen`, `role`, `split`, `split_rules`, `n`, `class_counts`, `cache`;
+  - `train` and `val`: `manifest`, `manifest_sha256`, `frozen`, `role`, `split`, `split_rules`, `n`, `class_counts`, `cache`. With several manifests, `manifest`, `manifest_sha256`, `role` and `cache` join theirs with `+` (the N-table's form). `frozen` is true only when all are frozen, and `n` and `class_counts` are totals;
   - `head_config`: `path` and `sha256` of the file, then the effective recipe, with defaults filled in;
   - `fit`: `select`, `epochs_run`, `best_epoch`, `stopped_early`, `val_macro_f1`, `val_loss`, `val_balanced_loss`, `history`. proto adds `tau`, the learned τ of the kept epoch. For mix, `epochs_run = 0`, `best_epoch = null`, `history = []`, and the validation scores are the mixture's;
   - `components`: for mix, `[{head, run_id}]` for linear and proto; otherwise null;
@@ -115,7 +117,7 @@ Every N1–N3 number comes from a head trained on cached features, so a head run
 - **FR-010 API.**
   - `ms.heads` exports `HEADS` (`linear`, `proto`, `mix`), `build_head(head, dim, n_classes, **params)`, `features`, `model_version`, `load_run`, `list_runs` and `Run`.
   - `ms.heads.train` exports `main(argv) -> exit code`, `focal_loss`, `epoch_order(y, sampling, generator)` (one epoch's row indices) and `init_prototypes(x, y, n_classes, k, seed)` (`[C, K, D]`, unit rows).
-- **FR-011 Model version.** `msv0.1+<backbone_id>@<res>.<head>.man-<train manifest sha256[:6]>` (H8 §6.2; work plan W5). It is the same for the five seeds, whose runs differ by `run_id`.
+- **FR-011 Model version.** `msv0.1+<backbone_id>@<res>.<head>.man-<train manifest sha256[:6]>` (H8 §6.2; work plan W5). Several training manifests give their `[:6]` joined with `-`. It is the same for the five seeds, whose runs differ by `run_id`.
 
 ## Success criteria (measurable, technology-agnostic)
 
@@ -145,10 +147,8 @@ Closed on 2026-09-19:
 
 9. **The linear head's steps (closed on 2026-09-19, by measurement; DECISIONS 69).** On Makerere (27 steps per epoch) the linear head is still improving when the 50 epochs end: its best epoch is 50 for four seeds of five on both backbones. On Tanzania (307 steps per epoch) it stops by epoch 15. H8's recipe stays: 50 epochs, and lr 1e-3 is already the top of its range. A logit scale or more epochs would be a config change with new run ids, not a contract change, and it is the owner's call.
 
-Open:
-
-10. **Training on several manifests.** N2's "Makerere + iBean → Tanzania" trains on two manifests, and iBean's role is `test_only` (spec 001 FR-001; DECISIONS 35). Both are settled with N2, and a run has one training manifest until then.
-11. **Anthracnose in N2.** Tanzania's third class can be trained and then left out of the scoring, or the heads can be trained on the shared classes only. N2's protocol decides.
+10. **Training on several manifests (closed on 2026-09-19 by the owner).** N2's "Makerere + iBean → Tanzania" trains on Makerere's and iBean's train splits and stops early on their validation splits. The runs are quotable although iBean's role is `test_only` (US-5.1; spec 001 Clarification 10).
+11. **Anthracnose in N2 (closed on 2026-09-19 by the owner).** The Tanzania heads keep their three classes. N2 decides among the classes both sides have, healthy and rust, and scores only those rows (spec 005 US-7).
 
 ## Out of scope
 

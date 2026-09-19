@@ -1,0 +1,25 @@
+# N2, the cross-dataset directions (work plan W3 "N2"; spec 005 US-7), as the owner decided on
+# 2026-09-19 (DECISIONS 74). A head run whose training manifests are a direction's `train` is
+# scored on the direction's `test` manifest, and decides among the direction's `classes` only:
+# a class that one side lacks (Tanzania's anthracnose) is in neither the decision nor the
+# scored rows. `split: test` reads the target's frozen test split, the rows N1 reads; `split:
+# all` reads every row of a test-only target. `metrics` defaults to macro_f1 and one recall per
+# class. A changed direction is a new set of rows; rows already in the table stay.
+n2:
+  - train: [tanzania_v1]
+    test: makerere_v1
+    split: test
+    classes: [healthy, rust]
+  - train: [tanzania_v1]
+    test: makerere_crops_v1
+    split: test
+    classes: [healthy, rust]
+    metrics: [recall:rust]       # the crops hold no healthy class (DECISIONS 46)
+  - train: [tanzania_v1]
+    test: ibean_v1
+    split: all                   # iBean is test-only: every healthy and rust row
+    classes: [healthy, rust]
+  - train: [makerere_v1, ibean_v1]
+    test: tanzania_v1
+    split: test
+    classes: [healthy, rust]     # anthracnose only where both sides have it

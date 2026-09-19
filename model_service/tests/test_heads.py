@@ -47,11 +47,16 @@ FIT_KEYS = {
 
 
 def train(
-    capsys, root: Path, *args: str, heads_root: Path | None = None, manifest: str = "alpha"
+    capsys,
+    root: Path,
+    *args: str,
+    heads_root: Path | None = None,
+    manifest: str | tuple[str, ...] = "alpha",
 ) -> tuple[int, str]:
+    names = (manifest,) if isinstance(manifest, str) else manifest
     argv = [
         "--backbone", BACKBONE, "--res", str(RES),
-        "--train-manifest", str(root / "manifests" / f"{manifest}_v1.jsonl"),
+        "--train-manifest", *(str(root / "manifests" / f"{m}_v1.jsonl") for m in names),
         "--cache-root", str(root / "cache"), "--heads-root", str(heads_root or root / "heads"),
         "--compute-log", str(root / "log.jsonl"), *args,
     ]  # fmt: skip
@@ -394,6 +399,61 @@ def test_a_proto_class_needs_k_train_rows_and_the_error_comes_before_any_run(tmp
     assert nothing_written(tmp_path)  # not even the linear run, which alone could train
     code, text = train(capsys, tmp_path, "--head", "linear", "--seed", "0")
     assert code == 0, text
+
+
+def test_a_further_training_manifest_may_be_test_only_and_the_run_stays_quotable(tmp_path, capsys):
+    """US-5.1 and FR-004 (N2's Makerere + iBean; the owner's decision of 2026-09-19): the first
+    manifest's role decides; each manifest trains on its train split and validates on its own
+    validation split; the sides and the model version name both manifests."""
+    alpha = make_manifest(tmp_path, "alpha")
+    beta = make_manifest(tmp_path, "beta", role="test_only", seed=1)
+    gamma = make_manifest(tmp_path, "gamma", seed=2)
+    make_manifest(
+        tmp_path, "delta", role="holdout_unknown", counts={"holdout_unknown": {"unknown_als": 8}}
+    )
+    code, text = train(
+        capsys, tmp_path, "--head", "linear", "--seed", "0", manifest=("alpha", "beta")
+    )
+    assert code == 0, text
+    (run,) = runs(tmp_path / "heads")
+    both = f"{sha256(alpha)}+{sha256(beta)}"
+    assert run["quotable"] is True and run["train"]["role"] == "train_eval+test_only"
+    assert run["train"]["manifest_sha256"] == run["val"]["manifest_sha256"] == both
+    assert run["train"]["n"] == 2 * sum(COUNTS["train"].values())
+    assert run["val"]["n"] == 2 * sum(COUNTS["val"].values())
+    assert run["model_version"].endswith(f".man-{sha256(alpha)[:6]}-{sha256(beta)[:6]}")
+    (row,) = log(tmp_path)
+    assert row["dataset"] == "alpha+beta"
+
+    code, text = train(
+        capsys,
+        tmp_path,
+        "--head",
+        "linear",
+        "--seed",
+        "0",
+        "--val-manifest",
+        str(beta),
+        manifest=("alpha", "beta"),
+    )
+    assert code == 0, text
+    only_beta = [r for r in runs(tmp_path / "heads") if r["val"]["manifest_sha256"] == sha256(beta)]
+    assert len(only_beta) == 1 and only_beta[0]["train"]["manifest_sha256"] == both
+    code, text = train(
+        capsys,
+        tmp_path,
+        "--head",
+        "linear",
+        "--seed",
+        "0",
+        "--val-manifest",
+        str(gamma),
+        manifest=("alpha", "beta"),
+    )
+    assert code == 2 and "val_not_in_domain" in text
+    for names in (("beta", "alpha"), ("alpha", "delta")):  # test_only first; a held-out set
+        code, text = train(capsys, tmp_path, "--head", "linear", "--seed", "0", manifest=names)
+        assert code == 2 and "role_not_trainable" in text, names
 
 
 # --- the compute log (US-6) ------------------------------------------------------------------

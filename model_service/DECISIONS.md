@@ -858,3 +858,88 @@ the W2 slice's run, which is not quotable. The rows are in `results/n_table.json
       features carry the disease rather than the site, and the guard-rail check compares
       the two.
     - Abstention rates come with S4.4 (W4).
+
+## 2026-09-19 — W3 · N2 at 224: three heads, five seeds (ahead of schedule)
+
+The work plan's "N2". Four questions the plan left open were put to the owner, who decided
+them on 2026-09-19 (74). `make eval` wrote 300 per-seed rows and 60 aggregates, all quotable.
+Every N1 aggregate now has its N2 pair (spec 005 US-4.1).
+
+74. **The owner's four decisions, and how N2 carries them out.**
+    - **Makerere + iBean train together, and the runs are quotable.** Spec 001 gives iBean
+      the role `test_only`, and it stays so. As a training source it now joins Makerere in
+      this one direction (spec 001 Clarification 10, amended).
+    - `ms.heads.train` takes several `--train-manifest`s: the first one's role decides, and a
+      further one may be `test_only`. Each trains on its train split and stops early on its own
+      validation split (spec 003 US-5.1, closing Clarification 10).
+    - The 30 runs (two backbones × three heads × five seeds) train on 7,422 rows (Makerere's
+      6,818 and iBean's 604) and validate on 1,558. The linear head again ends at the epoch
+      cap (69).
+    - A run over two manifests joins their paths and hashes with `+` in `run.json`, as the
+      N-table does. Its model version names both: `man-0670c6-423a16`. A single-manifest run
+      keeps its run id, so the 60 runs of 70 stayed as they were.
+    - **The crop level reports rust recall only.** `makerere_crops_v1` holds no healthy crop
+      (46), so `Tanzania → Makerere rust crops` has one row per head and seed: `recall:rust`.
+    - **Tanzania's three-class heads decide between healthy and rust**, the classes both sides
+      have. Rows of other classes are not scored: "anthracnose only where both sides have it"
+      (spec 003 Clarification 11, closed).
+    - **The targets are the frozen test splits, and every row of iBean.** Makerere's and
+      Tanzania's test splits are the rows N1 reads. iBean is a test-only set, so all 863 of
+      its healthy and rust rows are scored, with `test_split = all` (spec 005 FR-001).
+    - The directions live in `configs/eval.yaml` (spec 005 US-7, FR-010). `make eval`
+      scores a run on every direction whose training manifests are its own. N1 is scored only
+      for runs trained on one manifest.
+    - H9 §7 is not in the repository, so the verdict's rules still copy the work plan's
+      summary. N2's numbers now exist before that text was checked; spec 005 Clarification 6
+      stays open.
+75. **What N2 measured at 224**: the mean over seeds 0–4 with its 95 % t interval.
+
+    | direction | backbone | head | macro-F1 | recall healthy | recall rust |
+    |---|---|---|---|---|---|
+    | Tanzania → Makerere | `dinov2_l14_reg` | linear | 0.362 (0.360–0.364) | 1.000 (1.000–1.000) | 0.018 (0.016–0.020) |
+    | | | proto | 0.365 (0.341–0.390) | 1.000 (1.000–1.000) | 0.021 (-0.002–0.045) |
+    | | | mix | 0.363 (0.347–0.379) | 1.000 (1.000–1.000) | 0.018 (0.003–0.034) |
+    | | `dinov3_l16` | linear | 0.360 (0.359–0.361) | 1.000 (1.000–1.000) | 0.016 (0.015–0.017) |
+    | | | proto | 0.346 (0.344–0.348) | 1.000 (1.000–1.000) | 0.003 (0.001–0.005) |
+    | | | mix | 0.347 (0.344–0.350) | 1.000 (1.000–1.000) | 0.004 (0.002–0.007) |
+    | Tanzania → Makerere rust crops | `dinov2_l14_reg` | linear | — | — | 0.475 (0.457–0.493) |
+    | | | proto | — | — | 0.417 (0.365–0.469) |
+    | | | mix | — | — | 0.435 (0.400–0.471) |
+    | | `dinov3_l16` | linear | — | — | 0.485 (0.479–0.492) |
+    | | | proto | — | — | 0.319 (0.283–0.354) |
+    | | | mix | — | — | 0.367 (0.343–0.392) |
+    | Tanzania → iBean (all) | `dinov2_l14_reg` | linear | 0.545 (0.539–0.550) | 1.000 (1.000–1.000) | 0.228 (0.221–0.236) |
+    | | | proto | 0.525 (0.459–0.591) | 1.000 (0.998–1.001) | 0.206 (0.122–0.291) |
+    | | | mix | 0.527 (0.480–0.573) | 1.000 (0.998–1.001) | 0.207 (0.147–0.267) |
+    | | `dinov3_l16` | linear | 0.516 (0.511–0.520) | 1.000 (1.000–1.000) | 0.193 (0.187–0.198) |
+    | | | proto | 0.531 (0.514–0.548) | 1.000 (0.998–1.001) | 0.211 (0.191–0.232) |
+    | | | mix | 0.520 (0.510–0.531) | 1.000 (1.000–1.000) | 0.199 (0.186–0.211) |
+    | Makerere + iBean → Tanzania | `dinov2_l14_reg` | linear | 0.889 (0.881–0.897) | 0.960 (0.956–0.964) | 0.980 (0.979–0.981) |
+    | | | proto | 0.727 (0.651–0.803) | 0.922 (0.904–0.939) | 0.657 (0.469–0.845) |
+    | | | mix | 0.861 (0.843–0.879) | 0.949 (0.941–0.957) | 0.958 (0.935–0.981) |
+    | | `dinov3_l16` | linear | 0.802 (0.794–0.810) | 0.910 (0.905–0.915) | 0.993 (0.993–0.993) |
+    | | | proto | 0.718 (0.652–0.783) | 0.857 (0.803–0.910) | 0.917 (0.838–0.996) |
+    | | | mix | 0.782 (0.736–0.829) | 0.895 (0.862–0.929) | 0.992 (0.991–0.993) |
+
+    The scored rows: Makerere's test split, 1,050 healthy and 965 rust; its rust crops, 2,655;
+    iBean, 427 healthy and 436 rust; Tanzania's test split, 19,410 healthy and 1,649 rust.
+76. **How to read N2.**
+    - **The Tanzania heads call foreign rust healthy.** On Makerere's frames they find 0–2 %
+      of the rust, on iBean 19–23 %, and on Makerere's rust crops 32–49 %. Their own
+      three-class argmax picks anthracnose for at most 1.6 % of these rows. So the choice
+      between healthy and rust (74) does not cause this; it is how the heads read the
+      pictures.
+    - Tanzania's pictures are close-ups of single leaves (1000×750). Makerere's crops are
+      nearer to that than its whole frames, and they fare best of the three.
+    - **Makerere + iBean → Tanzania holds up far better, at 0.72–0.89.** Its healthy recall
+      of 0.86–0.96 on 19,410 healthy rows still means about 780–2,780 false rust calls, and
+      that is what pulls macro-F1 below the rust recall.
+    - The proto heads vary a lot across seeds in this direction. DINOv2's rust recall
+      interval is 0.47–0.85.
+    - The t interval is not clipped (72), so it can dip below 0 as well (DINOv2's proto on
+      Makerere's rust, −0.002).
+    - **Between the backbones**, DINOv3 is ahead in two cells only, inside the intervals:
+      proto on iBean (+0.006) and linear on the crops (+0.010). DINOv2 is ahead elsewhere, by
+      up to 0.087 (linear, Makerere + iBean → Tanzania). The verdict is W4's, by its rules.
+    - N1 is 0.988–0.996 and N2 is 0.35–0.89, so N1 ≫ N2. What that does and does not show
+      is the guard-rail check's, the next task.

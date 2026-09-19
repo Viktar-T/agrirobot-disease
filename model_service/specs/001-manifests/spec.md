@@ -145,7 +145,7 @@ As the ML role, I declare a manifest version frozen before the first head is tra
 
 | Manifest ← members | Role | Rows from (under `data/raw/<member>/`) | `class_raw` → KM2 (`class_map_v1`) | `group_keys` the source publishes | `split_rule` |
 |---|---|---|---|---|---|
-| `ibean` ← ibean | test-only: an N2 target. Its within-dataset split serves the W2 slice, and those numbers are never quoted | `extracted/<split>/<class>/` | folder: `healthy`; `bean_rust` → rust; `angular_leaf_spot` → unknown_als | none (the source's own split stays visible in `path`, unused) | `unblocked:random_by_phash_group` |
+| `ibean` ← ibean | test-only: an N2 target. Its within-dataset split serves the W2 slice, and those numbers are never quoted. It also trains, with Makerere, in N2's Makerere + iBean → Tanzania (the owner's decision of 2026-09-19; spec 003 US-5.1) | `extracted/<split>/<class>/` | folder: `healthy`; `bean_rust` → rust; `angular_leaf_spot` → unknown_als | none (the source's own split stays visible in `path`, unused) | `unblocked:random_by_phash_group` |
 | `makerere` ← makerere | train and evaluate | `extracted/<archive>/<archive>/*.jpg`, with the XML beside each image | XML `class`: `ALS` → unknown_als, `Bean Rust` → rust; without XML: `healthy` (the folder) | XML: `district`, `subcounty`, `date` (`datetime`), `variety`, `plant_age` (`age`), and boxes. Healthy images: `date` only, from the file name (see Edge cases) | `blocked:district`; healthy images join through their date (US-3.2) |
 | `tanzania` ← tz155k, tz59k | train and evaluate | `extracted/<archive>/<class folder>/*.jpg` | folder without its chunk digits: `healthy`, `rust`, `anthra` → anthracnose | `date` (EXIF `DateTimeOriginal`). No region or session: the folders are flat class folders split into chunks, and the tz59k record states one region (Mbeya) | `blocked:date` |
 | `swm` ← swm | held-out unknown | `extracted/r-swm-dataset/r-swm-dataset/original-images/<split>/images/`, with the VOC XML in `…/pascal-voc/<split>/`. The `bbox/` renderings are excluded (`drawn_boxes`), and the SWM crops are `swm_crops` (US-6) | VOC object names, distinct, sorted, joined ` + `: anything with `White Mold` → unknown_wm; apothecia or sclerotia only → excluded | `date` and `session` (the `ds-<date>-<place>` prefix) from the file name | `holdout_unknown` |
@@ -190,7 +190,7 @@ Items 1–7 keep the draft's numbers, because other files cite them; items 8–1
 7. **ACRE (open)**: a stretch goal (test-only, `none`); decide at the end of W2.
 8. **Tanzania is one manifest (closed)**: `tanzania`, over tz155k and tz59k, not one manifest per record. tz59k adds one image (finding 1), and N2 and N4 treat Tanzania as one source.
 9. **One row per distinct image (closed)**: copies go to `dup_paths` (finding 2), and an image held under two labels is excluded (finding 3).
-10. **iBean (closed)**: test-only in the protocol, with an unblocked within-dataset split for the W2 slice. Angular leaf spot is `unknown_als`.
+10. **iBean (closed)**: test-only in the protocol, with an unblocked within-dataset split for the W2 slice. Angular leaf spot is `unknown_als`. Amended on 2026-09-19 by the owner: iBean also trains, beside Makerere, in N2's Makerere + iBean → Tanzania, where it is a training source and not a target (spec 003 US-5.1). Its numbers as a target stay N2's Tanzania → iBean, over all its healthy and rust rows (spec 005 US-7).
 11. **SWM rows are the R-SWM originals (closed)**: the class map decides which labels are `unknown_wm`, and the 300-px crops become `swm_crops` (P2).
 
 ## Out of scope

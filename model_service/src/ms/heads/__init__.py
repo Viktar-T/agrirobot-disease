@@ -38,8 +38,10 @@ SERVICE_VERSION = "msv0.1"
 
 
 def model_version(backbone_id: str, res: int, head_id: str, train_manifest_sha256: str) -> str:
-    """msv0.1+<backbone_id>@<res>.<head_id>.man-<train manifest sha256[:6]> (work plan W5)."""
-    return f"{SERVICE_VERSION}+{backbone_id}@{res}.{head_id}.man-{train_manifest_sha256[:6]}"
+    """msv0.1+<backbone_id>@<res>.<head_id>.man-<train manifest sha256[:6]> (work plan W5);
+    several training manifests (sha256s joined with +) give their [:6] joined with -."""
+    man = "-".join(sha[:6] for sha in train_manifest_sha256.split("+"))
+    return f"{SERVICE_VERSION}+{backbone_id}@{res}.{head_id}.man-{man}"
 
 
 def features(cache: Cache, index: np.ndarray, tokens: str) -> np.ndarray:
