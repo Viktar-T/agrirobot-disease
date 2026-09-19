@@ -1,0 +1,17 @@
+{
+  "tolerance": 2e-06,
+  "rule": "cosine(CLS, golden) >= 1 - tolerance for every fixture image (spec 002 US-6)",
+  "measured": {
+    "what": "cosine(CLS float16 autocast, CLS float32) on the 30 fixture images",
+    "min": 0.999998924,
+    "mean": 0.999999222,
+    "gap": 1.0755192534350755e-06
+  },
+  "vectors": "dinov2_l14_reg_224_cls.npy: CLS of the float16 run, manifest row order",
+  "manifest": "ibean_v1.jsonl",
+  "device": "NVIDIA GeForce RTX 5060 Laptop GPU",
+  "torch_version": "2.11.0+cu128",
+  "transformers_version": "5.17.0",
+  "created_at": "2026-09-19T11:04:57Z",
+  "script": "model_service/tests/fixtures/make_golden.py"
+}

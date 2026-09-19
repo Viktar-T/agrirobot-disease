@@ -1,6 +1,6 @@
 # Feature specification: 001 — Dataset manifests
 
-**Branch**: `001-manifests` · **Created**: 2026-09-17 · **Clarified**: 2026-09-19, against the data on disk · **Status**: Clarified, next `/plan`; acceptance tests in `model_service/tests/test_manifests.py`, red until the W2 implementation
+**Branch**: `001-manifests` · **Created**: 2026-09-17 · **Clarified**: 2026-09-19, against the data on disk · **Status**: Implemented for iBean on 2026-09-19 (`ms.data.manifests`, the W2 slice): 26 of the 36 acceptance tests in `model_service/tests/test_manifests.py` green; the readers for Makerere, Tanzania and SWM, and blocked splits, come with their W2 tasks
 **Input**: H8 §6.3 (data preparation), `docs/piece4-work-plan.md` S4.1, the E1 dataset audit (`50_E1_audit-of-existing-datasets.md`), the W1 data note (`data/README.md`, findings 1–10). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
 
 ## Why

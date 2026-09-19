@@ -1,0 +1,19 @@
+# Linear probe - the reference head (H8 6.5): logistic regression on L2-normalised features,
+# trained with the shared head recipe of H8 6.5 / work plan W3. First used by the W2 vertical
+# slice (DECISIONS 34); spec 003 (W3) may change any value, and a changed file is a new run_id.
+head: linear
+optimizer: adamw
+lr: 1.0e-3            # H8: 5e-4 - 1e-3
+weight_decay: 1.0e-4
+batch_size: 256
+max_epochs: 50
+patience: 10          # epochs without a better validation score before stopping (not in H8)
+loss: focal
+focal_gamma: 2.0
+label_smoothing: 0.1
+sampling: class_balanced   # each epoch draws n rows with replacement, p ~ 1 / class count
+# early stopping and the epoch kept, on the in-domain validation split only: cross-entropy
+# averaged per class (continuous, and weighted like macro-F1); ties -> higher macro-F1.
+# Not macro-F1 itself: on iBean's 87 validation images it moves in one-image steps and
+# stopped the first slice run at epoch 16 of 50 with the loss still falling (DECISIONS 34).
+select: balanced_val_loss

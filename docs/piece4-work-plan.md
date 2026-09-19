@@ -65,7 +65,7 @@ Done when: `make test` runs (red for S4.1/S4.2); iBean and Makerere on disk with
 
 Goal: the **iBean vertical slice** end to end, then manifests and 224-px caches for all sets; the first number (N4).
 
-- [ ] **Mon–Tue — the slice on iBean**: `make manifests` (iBean only) → `make cache BB=dinov2_l14_reg RES=224` (CPU is acceptable here: ⚠ ~30–40 min for 1,296 images) → linear probe (`ms.heads.train --head linear`, one seed) → one N1 row (`split_rule = "unblocked"`) → `results/n_table.jsonl` → `make serve` and `POST /v1/predict` with one cached image. This is the whole pipeline once, on the smallest data; everything after is widening.
+- [x] **Mon–Tue — the slice on iBean**: `make manifests` (iBean only) → `make cache BB=dinov2_l14_reg RES=224` (CPU is acceptable here: ⚠ ~30–40 min for 1,296 images) → linear probe (`ms.heads.train --head linear`, one seed) → one N1 row (`split_rule = "unblocked"`) → `results/n_table.jsonl` → `make serve` and `POST /v1/predict` with one cached image. This is the whole pipeline once, on the smallest data; everything after is widening. — *Done 2026-09-19, ahead of W2, on the GPU. `ibean_v1`: 1,295 rows (train 604, val 87, test 172, 432 held out), not frozen yet (Clarification 4). Cache DINOv2 @ 224, fp16: 1,295 images in 19.6 s. The linear head needs `--allow-test-only`, because iBean is test-only. N1 macro-F1 0.977, `unblocked:random_by_phash_group`, never quoted. `make serve` answered `POST /v1/predict` for a cached test image from the cache. The heads, eval and service code is ahead of specs 003, 005 and 006, and its choices are DECISIONS 33–41. Two findings for spec 003: macro-F1 on 87 validation images was too coarse for early stopping, and the linear recipe underfits iBean (3 steps per epoch). The fp16/fp32 check set the golden tolerance at 2e-6.*
 - [ ] **Wed — Makerere**: manifest with real grouping keys (district/sub-county/date from the Dataverse metadata; check completeness — H6 E4 lead); box-level crops (10 % margin) as a second manifest; the first *blocked* split; S4.1 tests green.
 - [ ] **Wed–Thu — Tanzania**: exact-hash de-duplication across the three records; phash groups; the class map; manifests frozen; test manifests hashed and listed in `DECISIONS.md` ("frozen before any head").
 - [ ] **Thu–Fri — caches at 224** for both backbones on all sets (GPU); compute log rows for every extraction (N7).
@@ -132,9 +132,11 @@ make download DS=ibean
 make manifests DS=ibean                     # S4.1: data/manifests/ibean_v1.jsonl, split_rule=unblocked
 make cache BB=dinov2_l14_reg RES=224 DS=ibean   # S4.2: cache + meta.json + compute_log row
 python -m ms.heads.train --backbone dinov2_l14_reg --res 224 --head linear --seed 0 \
-       --train-manifest data/manifests/ibean_v1.jsonl --split train --val-split val
+       --train-manifest data/manifests/ibean_v1.jsonl --split train --val-split val \
+       --allow-test-only                     # iBean's role is test_only (DECISIONS 35)
 make eval                                    # one N1 row -> results/n_table.jsonl + n_table.md
 make serve                                   # then: POST /v1/predict with one cached image
+                                             # (body: python -m ms.service.example)
 ```
 
 Expected: an afternoon if the GPU is there, a day on CPU. What it proves: the contracts hold end to end on real bean images before any scale is added. What it does not prove: anything about accuracy — iBean is unblocked and tiny; its number is never quoted.

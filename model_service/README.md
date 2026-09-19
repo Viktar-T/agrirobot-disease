@@ -37,8 +37,28 @@ optional `HF_HOME` so the checkpoints do not land on the system drive.
 | `src/ms/` | the package: `compute_log.py`, then `data/`, `cache/`, `heads/`, `abstain/`, `eval/`, `service/` | W1–W5 |
 | `configs/` | `backbones/*.yaml`, `datasets/*.yaml` (downloads), `manifests/*.yaml` (manifest recipes, spec 001), `class_map_v1.yaml`, `heads/*.yaml`, `eval.yaml` | W1–W3 |
 | `tests/` | pytest; `fixtures/ibean_30/` runs on CPU | W1 onwards |
-| `results/` | `compute_log.jsonl` (N7), later `n_table.jsonl`, `verdict.md` — small, tracked in git | W1 onwards |
+| `results/` | `compute_log.jsonl` (N7), `n_table.jsonl` + `n_table.md` (the numbers), later `verdict.md` — small, tracked in git | W1 onwards |
 | `cards/` | model cards, one per registered model | W5 |
+
+## The pipeline (the W2 vertical slice)
+
+The whole chain once, on iBean (`docs/piece4-work-plan.md` §3; DECISIONS 33–41). Its numbers
+only exercise the pipeline and are never quoted: iBean is test-only and unblocked.
+
+```bash
+make manifests DS=ibean                         # spec 001: data/manifests/ibean_v1.jsonl + sidecar
+make cache BB=dinov2_l14_reg RES=224 DS=ibean   # spec 002: data/cache/... + a compute-log row
+uv run python -m ms.heads.train --backbone dinov2_l14_reg --res 224 --head linear --seed 0 \
+    --train-manifest data/manifests/ibean_v1.jsonl --split train --val-split val --allow-test-only
+make eval                                       # one N1 row -> results/n_table.jsonl + .md
+make serve                                      # then, from another shell:
+uv run python -m ms.service.example > request.json
+curl -s -H "content-type: application/json" -d @request.json http://127.0.0.1:8000/v1/predict
+```
+
+On Windows, `.\make.ps1 manifests -DS ibean`, `.\make.ps1 cache -BB dinov2_l14_reg -RES 224
+-DS ibean`, and so on. Every step is idempotent: run it again and it does nothing. Heads land
+in `data/heads/<run_id>/` (git-ignored).
 
 ## The compute log (N7)
 

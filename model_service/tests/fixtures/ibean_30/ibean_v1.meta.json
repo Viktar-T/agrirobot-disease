@@ -80,10 +80,11 @@
   ],
   "licence_source": "ibean/DOWNLOAD.json",
   "allow_unknown_licence": false,
-  "manifest_sha256": "0c5b57f2ae27a9ab925a1e8ef4d722c0986b1868c4f5fc430fe8fc1329e63f1c",
-  "built_at": "2026-09-19T09:59:30Z",
+  "manifest_sha256": "0944c0fa333ae8367d067ae566ec3bd01dad34d706a8c9c04db7868980d678b7",
+  "built_at": "2026-09-19T11:04:00Z",
   "builder": {
-    "module": "model_service/tests/fixtures/make_ibean_30.py",
-    "git_sha": "61a47d9"
+    "module": "ms.data.manifests",
+    "version": "0.0.1",
+    "git_sha": "e042e56"
   }
 }

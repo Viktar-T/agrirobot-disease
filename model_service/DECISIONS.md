@@ -284,3 +284,94 @@ piece 1's own "done when", not of this hand-shake.
     `sha256` and spec 002's `sha256[N]`. S4.6's cached-hash path looks it up in the caches
     after recomputing it from the bytes it fetches, so a wrong hash in a request cannot select
     another image's features.
+
+## 2026-09-19 — W2 · the vertical slice on iBean (ahead of schedule)
+
+The work plan's "Mon–Tue — the slice on iBean", run end to end on the dev laptop's GPU. Its
+numbers exercise the pipeline and are never quoted: iBean is test-only in the protocol and
+unblocked (H8 6.3).
+
+33. **The slice runs ahead of specs 003, 005 and 006.** `ms.heads.train`, `ms.eval.run` and
+    `ms.service.app` are thin first versions with tests on the CPU fixture
+    (`tests/test_slice.py`). 34–37 record their choices, and the specs (W3–W5) may change any
+    of them with their own failing tests. The manifest builder implements spec 001 with a
+    reader for iBean only: Makerere, Tanzania and SWM bring theirs, and blocked splits, with
+    their W2 tasks, so the 10 tests of `test_manifests.py` that build them stay red until then.
+    The cache implements spec 002 in full.
+34. **The linear probe: logistic regression on L2-normalised CLS, with the H8 6.5 recipe.**
+    - `configs/heads/linear.yaml`: AdamW, lr 1e-3, wd 1e-4, batch 256, focal loss γ = 2,
+      label smoothing 0.1, at most 50 epochs, class-balanced sampling, patience 10. Training
+      runs on CPU and is deterministic for a seed.
+    - Early stopping and the epoch kept follow the validation split's cross-entropy averaged
+      per class (ties: macro-F1). The first slice run used macro-F1 itself: on iBean's 87
+      validation images it moves in one-image steps, peaked by chance at epoch 6 and stopped
+      the run at epoch 16 of 50 while the validation loss was still falling (0.675 → 0.526).
+      That run was deleted; its compute-log row stays.
+    - The head is still underfit on iBean. 604 rows make 3 steps per epoch, and at epoch 50 the
+      validation loss is 0.42 and falling (max probabilities about 0.65). The large sets take
+      far more steps per epoch, and temperature scaling (S4.4) sharpens the probabilities.
+      Whether the linear head needs more steps or a logit scale is for spec 003: a finding,
+      not a fix.
+    - Runs live in `data/heads/<run_id>/` (git-ignored: heads on DINOv3 features are
+      research-only, 13), as `head.pt` + `run.json`. The run_id is
+      `<backbone>-<res>-<head>-<tokens>-s<seed>-<hash8>`, the hash taken over every input
+      (cache key, both manifest hashes and splits, the head config's sha256, seed, trainer
+      version). So a rerun does nothing, and a changed config is a new run.
+    - `model_version = msv0.1+<backbone_id>@<res>.<head>.man-<train manifest sha256[:6]>`.
+35. **A test-only manifest trains only with `--allow-test-only`.** Spec 001 FR-001 leaves the
+    role for 003 to enforce, and the slice trains on iBean, whose role is `test_only`. The
+    flag is recorded in `run.json`, and the run, its N-table row and every service response
+    say "not quotable".
+36. **The N-table row (provisional S4.5).** It holds the plan's S4.5 fields, both manifest
+    hashes and splits, `n`, `classes`, `run_id`, `model_version`, `cache_key`, `quotable`
+    and `notes`.
+    - `split_rule` is the evaluated rows' rule, `unblocked:random_by_phash_group`; the plan's
+      "unblocked" is shorthand for it.
+    - One seed leaves `ci_low` and `ci_high` null (the interval is over five seeds); no
+      abstention yet gives `coverage` 1.0.
+    - `make eval` appends a row only when its identity (run, number, metric, test manifest
+      hash, split, coverage) is new, then renders `n_table.md`. A second run adds nothing.
+37. **The service slice answers from the cache only.**
+    - The request is checked against piece 1's schema, plus `request_id` and `options`. A
+      broken one gets HTTP 422 with `invalid_input` and the validator's reasons.
+    - `frame.uri` is a path relative to `data/raw` (`MS_DATA_ROOT`), an absolute path or
+      `file://`, and must resolve inside the data root. Other schemes (`mcap://`) get 501
+      until the uri forms are fixed with piece 2 (W3).
+    - The sha256 is recomputed from the bytes (32); a mismatch is 422. A hash cached under the
+      head's cache key, for any manifest, is answered without the backbone; any other gets 501
+      until features are computed on request (W5).
+    - Scores are an uncalibrated softmax over the head's classes, and `decision` is always
+      `predict` until S4.4. The response echoes `frame_uid` (31) and says all this in
+      `warnings`. The service serves `MS_HEAD_RUN`, else the newest run under `data/heads`.
+38. **Golden features and their tolerance (spec 002 Clarification 7, closed).** On the
+    fixture at 224, CLS under fp16 autocast against fp32 (RTX 5060, torch 2.11.0+cu128,
+    transformers 5.17.0) has a minimum cosine of 0.999998924 (mean 0.999999222). The gap,
+    1.08e-6, rounded up to one significant digit gives the tolerance, 2e-6: a relock may move
+    the features by as much as float16 itself does. The golden vectors are the fp16 run's CLS,
+    30 × 1024 float16 (60 KB), in `tests/fixtures/ibean_30/golden/` beside the measurement;
+    `tests/fixtures/make_golden.py` rebuilds them. Another GPU's fp16 kernels may differ at
+    the same scale, so the test belongs to this box, before relocks.
+39. **The fixture's manifest is now the builder's.** The builder reproduced every field of the
+    committed rows except `split`, its own seeded draw (8 of 30 rows moved), and
+    `make_ibean_30.py` now calls it, as 20 foresaw.
+40. **Builder choices inside spec 001.**
+    - `manifest_version` is the manifest version as a string ("1" for v1).
+    - pHash groups come from exact all-pairs Hamming distances in chunks of at most 2^24
+      comparisons (numpy `bitwise_count`): Tanzania's 112k rows are about 6·10^9 pairs, a
+      minute or so.
+    - The split: groups shuffled with the seed, largest first, each into the split that
+      brings its classes closest to 70/10/20. Then repair moves fill any split that lacks a
+      class, and if none can, the build fails with `class_missing_from_split`.
+    - Files are hashed and decoded by 8 threads, and every row of every member is read.
+41. **What the slice measured (never quoted).**
+    - `ibean_v1.jsonl`: 1,295 rows (healthy 427, rust 436, `unknown_als` 432). The renamed
+      `.DS_Store` is excluded (`not_an_image`), and there are no near-duplicates at pHash ≤ 6.
+      Split: train 604, val 87, test 172 (0.70/0.10/0.20 per class). sha256 `423a1666…6060`.
+      Not frozen: Clarification 4 (the pHash threshold) is still open.
+    - Cache `dinov2_l14_reg` @ 224, fp16, key `2b017210105b0b1f`: 1,295 images in 19.6 s,
+      model loading and weight hashing included (66 images/s). A rerun does nothing.
+    - Head `dinov2_l14_reg-224-linear-cls-s0-402db169`: 50 epochs in 0.3 s; validation
+      macro-F1 0.977.
+    - N1: macro-F1 0.977 on 172 test rows, `unblocked:random_by_phash_group`, not quotable.
+    - `make serve`, then `POST /v1/predict` with a cached test image: HTTP 200 in 1.8 ms,
+      from the cache. A broken frame got 422 with three validator reasons.

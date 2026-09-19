@@ -1,6 +1,6 @@
 # Feature specification: 002 — Feature cache
 
-**Branch**: `002-cache` · **Created**: 2026-09-19 · **Status**: Clarified, next `/plan`; acceptance tests in `model_service/tests/test_cache.py`, red until the W2 implementation
+**Branch**: `002-cache` · **Created**: 2026-09-19 · **Status**: Implemented 2026-09-19 (`ms.cache`, `ms.cache.extract`, the W2 slice); acceptance tests in `model_service/tests/test_cache.py` green, the golden test opt-in and green
 **Input**: H8 §6.4 (backbones, features), `docs/piece4-work-plan.md` S4.2 and §4 (conventions), DECISIONS 11–13 (extraction on the dev laptop, fp16 + SDPA, the key, transformers 5.x, DINOv3 terms), the backbone configs (`configs/backbones/*.yaml`), spec 001 (manifests). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
 
 ## Why
@@ -141,10 +141,10 @@ Closed on 2026-09-19:
 4. **`weights_sha256`** is the sha256 of the loaded weight file, not of the Hub revision. A corrupted or replaced download changes the key.
 5. **`sha256[N]`** is stored next to `image_id[N]`, for 006's cached-hash path.
 6. **Every split is extracted.** Evaluation needs test and held-out features too, so the spec 001 loader gains `purpose = extract`, which reads every split and uses no labels.
+7. **Golden tolerance (closed on 2026-09-19).** 2e-6. The fp16/fp32 comparison on the fixture gave a minimum CLS cosine of 0.999998924; the gap, 1.08e-6, is rounded up to one significant digit (DECISIONS 38).
 
 Open:
 
-7. **Golden tolerance.** It is set by the fp16/fp32 comparison on the fixture before the first real cache (W2 Monday, DECISIONS 11).
 8. **Shard size and batch size.** 1024 and 32 as the working defaults; confirm them with the W2 timing.
 9. **Full patch tokens** for a 2,000-image subset (work plan §4): a separate file, specified when W3 needs it.
 
