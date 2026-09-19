@@ -1,7 +1,7 @@
 # Feature specification: 005 — Results table (the N-table)
 
 **Branch**: `005-results-table` · **Created**: 2026-09-19 · **Status**: Implemented 2026-09-19 with the W3 Heads task (`ms.eval`: row checks, aggregates, pairs, rendering; `ms.eval.run`: N1 per class) and the N2 task (US-7, `configs/eval.yaml`); acceptance tests in `model_service/tests/test_n_table.py` green (DECISIONS 68, 74). SC-2 met at 224 on 2026-09-19. The verdict (US-6) and its tests come with the W4 "Verdict" task.
-**Input**: H8 §6.7 (results), H9 §7 (the verdict, as the work plan summarises it), `docs/piece4-work-plan.md` S4.5, the W3–W4 tasks and §4 (seeds; criteria written before the numbers), DECISIONS 36 (the provisional row) and 54 (the N4 row), specs 001 (split rules, hashes, freeze) and 003 (runs). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
+**Input**: H8 §6.7 (results), H9 §7 (the verdict, copied verbatim in US-6), `docs/piece4-work-plan.md` S4.5, the W3–W4 tasks and §4 (seeds; criteria written before the numbers), DECISIONS 36 (the provisional row) and 54 (the N4 row), specs 001 (split rules, hashes, freeze) and 003 (runs). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
 
 ## Why
 
@@ -60,16 +60,46 @@ Exit codes: 0; 2 on an input error or an invalid row, with nothing appended.
 2. It shows every aggregate row, with its seeds shown as `0–4`. It also shows every per-seed row that no aggregate covers, such as N4 and the W2 slice. The per-seed rows behind an aggregate stay in the `.jsonl`.
 3. It is rewritten only when its text changes, and never by hand.
 
-### US-6: The verdict (P2; its tests come with the W4 "Verdict" task)
+### US-6: The verdict (P2; its code and tests come with the W4 "Verdict" task)
 
-These rules are declared now, before any N2 or N3 number exists (work plan §4). They copy the work plan's summary of H9 §7; Clarification 6 lists what still has to be checked against H9 §7 itself.
+The rules are H9 §7's, copied verbatim below. H9 §7 was last changed on 2026-09-14, before any number existed (work plan §4). The owner settled its readings on 2026-09-19. Where H9 is silent or ambiguous, the reading is the one that keeps the champion, because "a tie goes to the champion" (DECISIONS 79).
 
-1. `make eval` writes `results/verdict.md` from the quotable aggregate rows alone, by code. No hand edits.
+1. `make eval` writes `results/verdict.md` from the table alone, by code, and nobody edits it by hand.
+   - It reads the quotable aggregate rows at 224 px, CLS, coverage 1.0.
+   - It refuses to run while `unpaired` lists anything (US-4.1).
 2. The champion is `dinov2_l14_reg` and the challenger `dinov3_l16`.
-3. **N2.** The challenger wins a direction when its mean is at least 2 percentage points above the champion's and the two five-seed intervals do not overlap. It wins N2 when it wins at least two of the three directions: Tanzania → Makerere, Tanzania → iBean, Makerere + iBean → Tanzania.
-4. **N3.** The challenger wins N3 when its AUROC is at least 0.02 above the champion's.
-5. **Ties** are broken by N4, then N6.
-6. **Licence is a hard gate.** A backbone whose licence does not allow the use cannot be chosen, whatever its numbers. The verdict states the gate for each backbone; for DINOv3 that is research-only until H6 C5 is signed (DECISIONS 13).
+3. **Criterion 1: N2.** The metric is macro-F1 on the shared classes, in the three directions: Tanzania → Makerere (frames), Tanzania → iBean, Makerere + iBean → Tanzania. The crop-level rows (rust recall) are reported, not counted. The challenger wins criterion 1 when, with each of the three heads, both hold:
+   - its mean over the three directions is at least 2 pp above the champion's;
+   - in at least two of the three directions, it is at least 2 pp ahead and the two five-seed intervals do not overlap (its `ci_low` above the champion's `ci_high`).
+4. **Criterion 2: N3.** The challenger wins criterion 2 when, with each of the three heads, its AUROC is at least 0.02 higher on both decision scores, confidence and kNN distance. This must hold for each held-out set: angular leaf spot and white mould.
+5. The champion wins a criterion by the same rule with the roles swapped.
+6. **Combining.**
+   - The challenger wins when it wins criterion 1 or criterion 2 and the champion wins neither.
+   - A split, where each backbone wins one criterion, goes to N4. The backbone whose probe balanced accuracy is at least 2 pp lower on both N4 targets (dataset and district) wins it.
+   - Anything else, including no wins at all, goes to the champion.
+7. **N6 (latency)** is reported, not a tie-breaker: H9 §7 criterion 4. H8 §6.7 and the work plan's W4 line summarise it as a tie-breaker, and H9 governs.
+8. **Outcome.**
+   - A winning challenger joins the model set behind the service interface, and never evicts the champion this season.
+   - The licence (H6 C5) is a hard gate for anything that ships, whatever the numbers say. DINOv3 is research-only until C5 is signed (DECISIONS 13).
+   - Whatever the result, the report states both backbones' numbers, the probe and the abstention curves.
+
+#### H9 §7, verbatim
+
+Source: `D:\Life-OS\FUND-GRANT\30_projects\AgriRobot\05_sourses\10.03_dr_choroby-fasoli-sparag\88_H9_backbone-decision-dinov2-vs-dinov3.md`, section 7, last changed 2026-09-14 14:00 (+02:00).
+
+> ## 7. Pre-declared decision criteria (champion/challenger, per H8 §2 D-7)
+>
+> Evaluated in Demo 1 on the blocked protocol of H8 §6.7, five seeds, both backbones through identical heads:
+>
+> | # | Criterion | Rule |
+> |---|---|---|
+> | 1 | **Cross-dataset macro-F1** on the shared classes (healthy / rust; anthracnose where both sides have it), averaged over transfer directions | challenger wins only if it is ahead by ≥ 2 pp **and** the five-seed intervals do not overlap on at least two of three directions |
+> | 2 | **Unknown recall** — AUROC of the abstention score on held-out ALS and white-mould imagery vs known classes | ≥ 0.02 AUROC advantage counts as a win |
+> | 3 | **Site-prediction probe** accuracy from the embeddings (lower is better) | reported; a tie-breaker, not a win condition |
+> | 4 | **Latency** at the central node, batch 1 and batch 32 | reported |
+> | 5 | **Licence sign-off** (H6 C5) | a hard gate for anything that ships, whatever 1–4 say |
+>
+> Outcome rule (D-7): a winning challenger **joins** the model set behind the service interface; it never evicts the champion in the same season. A tie goes to the champion on licence grounds. Whatever the result, the report in H8 §6.11 states both numbers, the probe and the abstention curves for both models — the cached features make this free.
 
 ### US-7: N2 (P1; the owner's decisions of 2026-09-19)
 
@@ -137,13 +167,7 @@ Closed on 2026-09-19:
 4. **The N4 cross-validation rule joins the split-rule vocabulary**, as its rows already use it (DECISIONS 54).
 5. **`seed = null` marks an aggregate**, and its `run_id` joins the five runs with `+`, as the manifest fields do for N4.
 
-Open:
-
-6. **The verdict's full text.** H9 §7 is not in the repository, so US-6 copies the work plan's summary. It has to be checked against H9 §7 before N2's numbers exist (W3 Thu):
-   - which metric N2 compares (macro-F1 over the shared classes?);
-   - which heads, resolution and coverage the verdict reads;
-   - how an N2 win and an N3 win combine;
-   - the order and thresholds of the N4 and N6 tie-breakers.
+6. **The verdict's full text (closed on 2026-09-19 by the owner).** US-6 copies H9 §7 verbatim, from the file and date it names, and states the owner's readings. Those readings settle the N2 metric and rule, the N3 scores, how the criteria combine, the N4 tie-breaker, N6 as reported only, and which rows and heads count. Where H9 stays silent, the reading keeps the champion (DECISIONS 79).
 7. **N2's rows (closed on 2026-09-19 by the owner).** The crop-level direction reports rust recall only. Tanzania's heads decide among healthy and rust. The targets are the frozen test splits, plus every row of iBean. Makerere + iBean train together (US-7; spec 003 Clarifications 10–11).
 
 ## Out of scope

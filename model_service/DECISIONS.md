@@ -981,3 +981,46 @@ the crops.
       features carry (N4, 56), and on Makerere the class ↔ trip confound (73).
     - The gap is the size of the shift between sets. N1 is the within-set ceiling, and N2 is
       the number to read for a new farm.
+
+## 2026-09-19 — W3 · the verdict's rules, from H9 §7 (the owner's decision)
+
+The owner pointed to H9 §7 and settled how to read it on 2026-09-19. Spec 005 US-6 now copies
+§7 verbatim, with its file and date, and states the rules the W4 verdict will compute. The
+verdict itself belongs to W4 and was not run.
+
+79. **The verdict follows H9 §7, read the way that keeps the champion.**
+    - **Source.** `D:\Life-OS\FUND-GRANT\30_projects\AgriRobot\05_sourses\
+      10.03_dr_choroby-fasoli-sparag\88_H9_backbone-decision-dinov2-vs-dinov3.md`, §7, last
+      changed 2026-09-14 14:00 (+02:00). The N-table's first number is from 2026-09-19, so
+      the criteria were written before any number, as the work plan asks.
+    - **The owner's readings:**
+      - **N2**: macro-F1 on the shared classes. The challenger must be ≥ 2 pp ahead on the
+        mean over the three directions. It must also be ≥ 2 pp ahead, with non-overlapping
+        five-seed intervals, in at least two of them. H9's sentence can be read as one
+        condition or as two; this reading takes both.
+      - **N3**: ≥ 0.02 higher AUROC on both decision scores, confidence and kNN distance.
+        H9 says "the abstention score", in the singular.
+      - **Combining.** The challenger wins if it wins N2 or N3 and the champion wins neither;
+        the champion wins a criterion by the same rule, with the roles swapped. A split goes
+        to N4: the backbone whose probe accuracy is ≥ 2 pp lower wins it. Anything else, no
+        wins at all included, goes to the champion. H9 does not say how its criteria combine.
+      - **N6** is reported only (H9 §7 criterion 4). The work plan's W4 line and H8 §6.7's
+        summary call it a tie-breaker, but H9 governs. The W4 line was left as it is.
+      - **The rows**: 224 px, CLS, coverage 1.0, and the challenger must win with all three
+        heads.
+      - **Outcome.** A winning challenger joins the model set and never evicts the champion
+        this season. The licence is a hard gate for anything that ships. The report states
+        both backbones' numbers whatever the result.
+    - **Where H9 is silent or ambiguous, the owner chose the reading that keeps the
+      champion** (H9: "a tie goes to the champion"). Four more points needed a reading
+      before the rules can be computed, and they take the same side:
+      - N4 has two targets, the dataset and the district. The tie-breaker needs the probe
+        to be ≥ 2 pp lower on both.
+      - N3 is counted for each held-out set, angular leaf spot and white mould, not pooled.
+      - The three directions are the frame-level ones. The crop-level rows measure rust
+        recall, one class, not the macro-F1 on shared classes that H9 names, so they are
+        reported and not counted.
+      - "Averaged over transfer directions" is the plain mean of the three directions'
+        five-seed means. "Do not overlap" means the leader's `ci_low` lies above the other's
+        `ci_high` (spec 005 US-2's 95 % t intervals).
+    - Nothing computes the verdict yet. `verdict.md` and its tests come with the W4 task.
