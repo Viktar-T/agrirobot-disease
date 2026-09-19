@@ -464,6 +464,34 @@ def test_us4_1_a_changed_or_missing_image_stops_the_run(tmp_path, capsys):
     assert log_rows(tmp_path) == []
 
 
+def test_a_dataset_id_without_a_recipe_is_its_one_manifest_on_disk(tmp_path, capsys, monkeypatch):
+    """--dataset <id> reads <id>_v<N>.jsonl, N from the recipe. A crops manifest has no recipe
+    (DECISIONS 46): its id names the one version on disk. None, or two, is an input error."""
+    configs, _ = tiny_backbone(tmp_path)
+    manifests = importlib.import_module("ms.data.manifests")
+    extract_module = _module("ms.cache.extract")
+    root = tmp_path / "manifests"
+    root.mkdir()
+    shutil.copy(MANIFEST, root / "ibean_crops_v1.jsonl")
+    monkeypatch.setattr(extract_module, "manifest_path", lambda m: manifests.manifest_path(m, root))
+    argv = [
+        "--backbone", BACKBONE, "--res", 28, "--raw-root", FIXTURE, "--config-dir", configs,
+        "--cache-root", tmp_path / "cache", "--compute-log", tmp_path / "compute_log.jsonl",
+        "--device", "cpu",
+    ]  # fmt: skip
+
+    code, text = run(capsys, *argv, "--dataset", "ibean_crops")
+    assert code == 0, text
+    npz, meta = the_cache(tmp_path / "cache")
+    assert npz.name == "ibean_crops_v1.npz" and meta["manifest"] == "ibean_crops_v1.jsonl"
+
+    for dataset in ("nothing", "ibean_crops"):
+        shutil.copy(MANIFEST, root / "ibean_crops_v2.jsonl")  # two versions: name the file
+        code, text = run(capsys, *argv, "--dataset", dataset)
+        assert code == 2 and "missing_file" in text and "Traceback" not in text
+    assert len(log_rows(tmp_path)) == 1
+
+
 def test_us4_2_load_cache_checks_the_manifest_the_key_and_the_shapes(tmp_path, capsys):
     configs, _ = tiny_backbone(tmp_path)
     assert extract(capsys, tmp_path, configs)[0] == 0

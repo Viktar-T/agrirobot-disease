@@ -208,9 +208,24 @@ def load_recipe(manifest: str, config_dir: Path = CONFIG_DIR) -> dict[str, Any]:
 
 
 def manifest_path(manifest: str, root: Path = MANIFEST_ROOT, version: int | None = None) -> Path:
-    """data/manifests/<manifest>_v<N>.jsonl, N from the recipe unless given."""
+    """data/manifests/<manifest>_v<N>.jsonl, N from the recipe unless given. A manifest
+    without a recipe (crops, which derive from their parent) is its one version in `root`."""
     if version is None:
-        version = int(load_recipe(manifest)["version"])
+        try:
+            version = int(load_recipe(manifest)["version"])
+        except ManifestError:
+            found = [
+                p
+                for p in sorted(Path(root).glob(f"{manifest}_v*.jsonl"))
+                if re.fullmatch(rf"{re.escape(manifest)}_v\d+", p.stem)
+            ]
+            if len(found) != 1:
+                raise ManifestError(
+                    "missing_file",
+                    f"no recipe for {manifest!r} and {len(found)} {manifest}_v<N>.jsonl in "
+                    f"{repo_relative(Path(root))}: name the file",
+                ) from None
+            return found[0]
     return Path(root) / f"{manifest}_v{version}.jsonl"
 
 

@@ -54,9 +54,16 @@ from ms.cache import (
     load_cache,
     preprocess,
 )
-from ms.data.manifests import file_root, git_sha, load_manifest, manifest_path, repo_relative
+from ms.data.manifests import (
+    ManifestError,
+    file_root,
+    git_sha,
+    load_manifest,
+    manifest_path,
+    repo_relative,
+)
 
-#: spec 002 Clarification 8: the working default, to confirm with the W2 timing
+#: spec 002 Clarification 8, confirmed by the W2 timing (DECISIONS 53)
 SHARD_SIZE = 1024
 WORKERS = min(8, os.cpu_count() or 1)
 STATE = "state.json"
@@ -406,10 +413,13 @@ def run(args: argparse.Namespace, started: float) -> int:
     shard_size = int(args.shard_size or SHARD_SIZE)
     cache_root = Path(args.cache_root)
 
-    manifest_file = Path(args.manifest) if args.manifest else manifest_path(args.dataset)
-    if not manifest_file.exists():
-        raise InputError("missing_file", f"no manifest {manifest_file} (run make manifests)")
-    manifest = load_manifest(manifest_file, None, "extract")
+    try:
+        manifest_file = Path(args.manifest) if args.manifest else manifest_path(args.dataset)
+        if not manifest_file.exists():
+            raise InputError("missing_file", f"no manifest {manifest_file} (run make manifests)")
+        manifest = load_manifest(manifest_file, None, "extract")
+    except ManifestError as exc:  # no recipe, or a frozen manifest whose bytes changed
+        raise InputError(exc.reason, str(exc)) from None
     # data/raw, or the root the sidecar names (crops: data/derived)
     raw_root = Path(args.raw_root) if args.raw_root else file_root(manifest_file)
     rows = manifest.rows

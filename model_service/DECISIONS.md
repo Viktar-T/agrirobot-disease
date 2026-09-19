@@ -511,3 +511,54 @@ and tz3's place in it on 2026-09-19, after the tz3 test below.
     "Frozen before any head" (SC-6): this list comes before every W3 head run. The one
     earlier head, the W2 slice's, was trained on `ibean_v1` with these same bytes, and it is
     never quoted (35).
+
+## 2026-09-19 — W2 · the 224 caches for both backbones (ahead of schedule)
+
+The work plan's "Thu–Fri — caches at 224", run on the dev laptop's GPU after the freeze (51).
+
+52. **Every frozen manifest has a 224 cache for both backbones** (spec 002 SC-1). That is
+    156,576 images per backbone, in fp16 autocast, batch 32, shards of 1,024. There is one
+    key per backbone: `dinov2_l14_reg` `2b017210105b0b1f` (the slice's, 41) and `dinov3_l16`
+    `718a3399a7ad5b68`.
+
+    | manifest | rows | DINOv2 s | images/s | DINOv3 s | images/s |
+    |---|---|---|---|---|---|
+    | `ibean_v1` | 1,295 | 19.6 (41) | 66 | 18.1 | 72 |
+    | `swm_v1` | 684 | 39.7 | 17 | 44.8 | 15 |
+    | `makerere_crops_v1` | 27,019 | 297.6 | 91 | 299.5 | 90 |
+    | `makerere_v1` | 15,402 | 207.2 | 74 | 295.7 | 52 |
+    | `tanzania_v1` | 112,176 | 1,259.4 | 89 | 1,416.2 | 79 |
+    | all five | 156,576 | 1,823 (30 min) | 86 | 2,074 (35 min) | 75 |
+
+    - Each time includes loading the model and hashing its weights. Every cache loads against
+      its manifest's frozen sha256, and its features are finite. Every extraction wrote one
+      compute-log row, and each cache's rows add up to its `n_images`; no run had to resume
+      (SC-3). A second `make cache` does nothing and adds no row (SC-2).
+    - DINOv3 on `makerere_v1` shared the CPU with a probe trial and the test suite, so its 52
+      images/s is not the machine's rate.
+    - The `.npz` files hold 0.70 GB per backbone, 0.50 GB of it Tanzania's, in `data/cache/`
+      (git-ignored). DINOv3's stay there (13).
+    - The sidecars name git `ab5732a`, whose extraction code made them. This commit changes
+      only how `--dataset` finds a manifest (53).
+53. **Throughput. Spec 002 Clarification 8 is closed: shards of 1,024 and batches of 32 stay.**
+    - At 224 the GPU is the limit on small pictures: about 90 images/s for both backbones on
+      the crops and on Tanzania, with the GPU at 93–100 % and held at 55–62 W by its power
+      cap, near 80 °C. DINOv3's 201 tokens run no faster than DINOv2's 261.
+    - On larger pictures decoding is the limit: 74 images/s on Makerere (1.3 MP on average)
+      and 15–17 on SWM (10 MP phone originals).
+    - After about 40 minutes of load, the laptop lowered the GPU's power cap to about 40 W
+      (1.4 GHz instead of 1.9). That is most likely why DINOv3 ran Tanzania at 79 images/s
+      against DINOv2's 89. An overnight run should be planned at that lower rate.
+    - At 224 a shard takes 11–15 s, so a laptop that sleeps loses little. A run uses 2.5 GB
+      of the 8 GB of VRAM, the display's share included.
+    - For W3 (11), a projection, not a measurement. Per image, 518 is about 6.2× the work of
+      224 for DINOv2 (1,374 tokens instead of 261), and 512 about 5.8× for DINOv3 (1,029
+      instead of 201). If the rate falls in proportion from the lower one above, the
+      high-res pass over the five manifests takes about 3–3.5 h per backbone: one night for
+      both, not the plan's GPU-day each. The timing at 518 that 11 asks for still has to
+      confirm this.
+    - `make cache DS=makerere_crops` stopped with a traceback: a crops manifest has no recipe
+      (46), and `--dataset` read the version from the recipe. Now an id without a recipe
+      names its one version on disk, and no file, or two versions, gives `missing_file`
+      (exit 2). A frozen manifest whose bytes changed now stops with
+      `frozen_manifest_modified` (exit 2), not a traceback. `test_cache.py` covers the id.

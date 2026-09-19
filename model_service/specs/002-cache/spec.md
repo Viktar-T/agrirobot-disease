@@ -1,6 +1,6 @@
 # Feature specification: 002 — Feature cache
 
-**Branch**: `002-cache` · **Created**: 2026-09-19 · **Status**: Implemented 2026-09-19 (`ms.cache`, `ms.cache.extract`, the W2 slice); acceptance tests in `model_service/tests/test_cache.py` green, the golden test opt-in and green
+**Branch**: `002-cache` · **Created**: 2026-09-19 · **Status**: Implemented 2026-09-19 (`ms.cache`, `ms.cache.extract`, the W2 slice); acceptance tests in `model_service/tests/test_cache.py` green, the golden test opt-in and green; SC-1 met at 224 on 2026-09-19 for both backbones and every frozen manifest (DECISIONS 52)
 **Input**: H8 §6.4 (backbones, features), `docs/piece4-work-plan.md` S4.2 and §4 (conventions), DECISIONS 11–13 (extraction on the dev laptop, fp16 + SDPA, the key, transformers 5.x, DINOv3 terms), the backbone configs (`configs/backbones/*.yaml`), spec 001 (manifests). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
 
 ## Why
@@ -16,7 +16,7 @@ Every number in piece 4 comes from frozen-backbone features, and computing them 
     [--device cuda|cpu] [--dtype float16|float32] [--batch-size N] [--shard-size N] [--max-shards K]
     [--compute-log model_service/results/compute_log.jsonl]
 
-- `--dataset <id>` reads `data/manifests/<id>_v<N>.jsonl`, where `N` is the version in the manifest's recipe.
+- `--dataset <id>` reads `data/manifests/<id>_v<N>.jsonl`, where `N` is the version in the manifest's recipe. A crops manifest has no recipe (spec 001 FR-012): its id names its one version on disk. No file, or several versions, is an input error (`missing_file`, exit 2).
 - `--dtype` defaults to the backbone config's `dtype`, `--batch-size` to its `batch_size`, and `--device` to `cuda` when present, else `cpu`.
 - Exit codes: 0 when the cache is complete (computed, resumed to the end, or already there); 1 when the run stopped early (`--max-shards`) and the next run resumes; 2 on an input error, with nothing new written.
 
@@ -142,10 +142,10 @@ Closed on 2026-09-19:
 5. **`sha256[N]`** is stored next to `image_id[N]`, for 006's cached-hash path.
 6. **Every split is extracted.** Evaluation needs test and held-out features too, so the spec 001 loader gains `purpose = extract`, which reads every split and uses no labels.
 7. **Golden tolerance (closed on 2026-09-19).** 2e-6. The fp16/fp32 comparison on the fixture gave a minimum CLS cosine of 0.999998924; the gap, 1.08e-6, is rounded up to one significant digit (DECISIONS 38).
+8. **Shard size and batch size (closed on 2026-09-19).** 1024 and 32 stay. At 224 a shard takes 11–15 s, and a run uses 2.5 GB of the 8 GB of VRAM. The GPU is the limit on small pictures (about 90 images/s for both backbones), and decoding on large ones (DECISIONS 53).
 
 Open:
 
-8. **Shard size and batch size.** 1024 and 32 as the working defaults; confirm them with the W2 timing.
 9. **Full patch tokens** for a 2,000-image subset (work plan §4): a separate file, specified when W3 needs it.
 
 ## Out of scope
