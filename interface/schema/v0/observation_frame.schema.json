@@ -14,11 +14,11 @@
     "frame": {
       "description": "The image. Same object as 'frame' in the model-service request (H8 section 6.2).",
       "type": "object",
-      "required": ["frame_id", "uri", "sha256", "width", "height"],
+      "required": ["frame_uid", "uri", "sha256", "width", "height"],
       "additionalProperties": false,
       "properties": {
-        "frame_id": {
-          "description": "Identifier of this image frame. Not a coordinate frame (that is metadata.pose.frame_id).",
+        "frame_uid": {
+          "description": "Identifier of this image frame. Named frame_uid, not frame_id: in ROS frame_id names a coordinate frame, as metadata.pose.frame_id does here (hand-shake with piece 4, 2026-09-19).",
           "$ref": "#/$defs/id"
         },
         "uri": {
@@ -194,7 +194,7 @@
     {
       "contract_version": "v0",
       "frame": {
-        "frame_id": "mak-luwero-000412",
+        "frame_uid": "mak-luwero-000412",
         "uri": "open_sets/makerere/IMG_0412.jpg",
         "sha256": "50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c",
         "width": 4096,

@@ -248,9 +248,11 @@ is opt-in and was not run.
 ## 2026-09-19 — W1 · interface hand-shake with piece 1 (their draft v0)
 
 Piece 4 adopts piece 1's W1 draft (`interface/README.md`,
-`interface/schema/v0/observation_frame.schema.json`), which is marked "not yet reviewed by
-P + E or the robotics side". The confirmation itself is still pending (M + P): if piece 1's
-review changes an answer, the entry below changes with it.
+`interface/schema/v0/observation_frame.schema.json`). **Confirmed on 2026-09-19 by Viktar
+Taustyka, the ML role, acting for piece 1 as P.** The request shape, yaw in radians and the
+`bbch_null_reason` enum are confirmed as drafted, and the image id is renamed to `frame_uid`
+(31). E and the robotics side have not reviewed piece 1's draft yet; that review is part of
+piece 1's own "done when", not of this hand-shake.
 
 28. **Service request = the `observation_frame` record + `request_id` + `options`.** Piece 1
     shaped the record as `frame` + `metadata` precisely so that this holds (their choice 1).
@@ -268,11 +270,15 @@ review changes an answer, the entry below changes with it.
     - Piece 4's v0 model does not use `bbch`; the service carries `bbch` and
       `bbch_null_reason` into its request log unchanged.
     - Frames built from the open datasets have `bbch = null` with `not_recorded`.
-31. **`frame_uid` is still open on piece 1's side, and piece 4 supports the rename.** In ROS,
-    `frame_id` names a coordinate frame, and v0 has both `frame.frame_id` (the image) and
-    `metadata.pose.frame_id` (the TF frame). Until piece 1 answers, `frame.frame_id` is the
-    image id. S4.6 reads it in one place and echoes it in the response, so a rename in v0.1
-    (W10) is a one-line change there.
+31. **The image id is `frame.frame_uid`, renamed in v0 on 2026-09-19.** In ROS, `frame_id`
+    names a coordinate frame, and v0 had both `frame.frame_id` (the image) and
+    `metadata.pose.frame_id` (the TF frame).
+    - The rename was made now, while v0 is a draft and no code reads it. After v0.1 (W10) it
+      would break every consumer, and the plan requires that v0.1 does not break S4.6.
+    - Piece 1's schema, its example and its README carry the change (their choice 11). A
+      record that still says `frame.frame_id` is now rejected.
+    - `pose.frame_id` keeps its name. S4.6 reads `frame_uid` in one place and echoes it in
+      the response.
 32. **The frame's `sha256` is piece 4's content hash.** Piece 1 defines it as the hash of the
     image bytes exactly as stored at `uri` (their choice 10), the same definition as spec 001's
     `sha256` and spec 002's `sha256[N]`. S4.6's cached-hash path looks it up in the caches
