@@ -1659,3 +1659,66 @@ request contract, the 422s, the cached-hash path and `model_version`.
        test. The fixture world's validation slice is two rows, so the only coverage it can
        carry is 0.50 (spec 004 US-3.3); the operating point is not what those two tests are
        about.
+
+## 2026-09-20 — W5 · the service (ahead of schedule)
+
+The work plan's W5 "Service". `ms.service.app` answers the interface of H8 §6.2 over one
+registered model, `ms.service.log` keeps the pairs for piece 3, and `configs/service.yaml`
+says which model that is. Spec 006's tests are 48 of 49 green; the one left red is N6's,
+which comes with the W5 "N6" task.
+
+120. **The demo serves the linear head trained on Makerere + iBean** (the owner's decision of
+     2026-09-20, closing the open point of 114). The verdict fixed the backbone, the
+     resolution and the tokens — `dinov2_l14_reg` at 224 on CLS (108) — and the head and the
+     training set were still open.
+     - **Why this one.** A demo frame is a frame the head has never seen, so N2 is the number
+       that predicts how it behaves, and this run carries the best N2 the champion has:
+       macro-F1 0.889 into Tanzania, against 0.861 for mix and 0.733 for proto. Its N1 on its
+       own set is 0.991, within 0.003 of the best. It is quotable, although iBean is
+       test-only, because it trains beside Makerere (74).
+     - `model_version` is `msv0.1+dinov2_l14_reg@224.linear.man-0670c6-423a16`: two training
+       manifests, so their first six hex digits join with a dash (spec 003).
+     - What would reverse it: a new verdict, or a later N2 that moves the order of the three
+       heads. Either way it is a change to `configs/service.yaml` and not to code.
+121. **A head's name includes its recipe.** The first real start-up matched **two** runs —
+     the 300-epoch one and the 50-epoch one the owner retired (80) — because they differ only
+     in the head config's sha256. So `head_config_sha256` joined the descriptor, and when the
+     config leaves it out the service fills it with the sha256 of `configs/heads/<head>.yaml`
+     as the repository holds it now.
+     - "linear" therefore means the linear recipe that is current, and a superseded run can
+       never be served by accident. A recipe changed without a retraining matches nothing and
+       the service says `missing_run`, which is the honest answer: the model the config
+       describes does not exist yet.
+     - This is the same lesson as 111 from the other side. The N-table marks a retired run's
+       rows superseded; nothing stopped the *service* from serving one until now.
+122. **A deployment without the backbone's config is replay-only, not broken.** It answers
+     every cached frame and gives 501 to the rest, says which mode it is in through
+     `GET /v1/model` (`features: "cache"` against `"cache+computed"`), and never pretends.
+     H8 §6.9 makes the cache the reason the demo does not depend on a GPU, and a machine that
+     holds the caches but not the weights — one the DINOv3 licence keeps them off, for
+     instance (13) — can still replay a whole mission.
+     - A deployment that *does* configure the backbone must have its weights at start-up:
+       `missing_weights` then, rather than a 500 on the first uncached frame. The weights are
+       resolved once at start-up and the model itself is loaded on the first frame that needs
+       it, so a replayed mission never touches it (H8 §6.9, "backbone loaded once").
+123. **The two feature paths are one path.** A computed frame is rounded to float16 before the
+     head sees it, exactly as the cache stores it (115), and the acceptance test asserts that
+     a frame answered from the cache and the same picture answered from its bytes give the
+     same decision, the same top1 and the same scores to 1e-6. On the fixture that holds bit
+     for bit, because the test's two paths share a device and a compute dtype.
+     - The test's uncached frame is the cached one re-containered as a PNG with the EXIF
+       rotation baked in, so the pixels are identical and the bytes are not. That is the only
+       way to make the comparison about the *path* rather than about the picture.
+124. **What the W2 slice promised, the spec has moved on from** (37 → 112–122), and
+     `test_slice.py` moved with it. Its service tests now name the run, fit an `abstain.json`
+     first, and expect a file that is not an image to be a 422 with the decoder's reason
+     rather than a 501: a real file the cache does not hold is computed now. The slice module
+     keeps the end-to-end chain; the contract itself is `test_service.py`'s.
+     - Its validation slice is two rows, so 0.50 is the only coverage it can carry (spec 004
+       US-3.3). That is a property of a 30-image fixture, not of the service.
+125. **The service writes its log where the tests cannot reach it.** The first run of the new
+     tests appended 96 rows to the repository's own `data/predictions/requests.jsonl`, because
+     `Settings` defaulted the path and the tests did not override it. The rows were deleted,
+     the tests now build their settings from their own `service.yaml`, and a module-scoped
+     fixture fails the suite if the repository's log changes while it runs — the guard 111
+     earned, applied to the second artefact a default path could reach.

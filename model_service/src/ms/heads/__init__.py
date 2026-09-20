@@ -44,16 +44,30 @@ def model_version(backbone_id: str, res: int, head_id: str, train_manifest_sha25
     return f"{SERVICE_VERSION}+{backbone_id}@{res}.{head_id}.man-{man}"
 
 
-def features(cache: Cache, index: np.ndarray, tokens: str) -> np.ndarray:
-    """float32 [len(index), D x token types]: each token type L2-normalised, then joined."""
+def features_from_tokens(tokens: str, **by_type: np.ndarray) -> np.ndarray:
+    """float32 [N, D x token types]: each token type L2-normalised, then joined in the order
+    `tokens` names them. The service computes a frame's tokens itself (spec 006 US-4.2) and
+    a cached row reads them from the .npz; both come here, so one frame answered either way
+    reaches the head as the same vector."""
     if tokens not in TOKEN_SPECS:
         raise ValueError(f"tokens must be one of {TOKEN_SPECS}, got {tokens!r}")
     parts = []
     for token in tokens.split("+"):
-        x = cache.tokens(token)[index].astype(np.float32)
-        x /= np.maximum(np.linalg.norm(x, axis=1, keepdims=True), 1e-12)
+        if token not in by_type:
+            raise ValueError(f"tokens {tokens!r} needs {token}, which was not given")
+        x = np.asarray(by_type[token], dtype=np.float32)
+        x = x / np.maximum(np.linalg.norm(x, axis=1, keepdims=True), 1e-12)
         parts.append(x)
     return np.concatenate(parts, axis=1)
+
+
+def features(cache: Cache, index: np.ndarray, tokens: str) -> np.ndarray:
+    """float32 [len(index), D x token types]: each token type L2-normalised, then joined."""
+    if tokens not in TOKEN_SPECS:
+        raise ValueError(f"tokens must be one of {TOKEN_SPECS}, got {tokens!r}")
+    return features_from_tokens(
+        tokens, **{token: cache.tokens(token)[index] for token in tokens.split("+")}
+    )
 
 
 class LinearHead(nn.Module):

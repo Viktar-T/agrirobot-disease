@@ -35,7 +35,7 @@ optional `HF_HOME` so the checkpoints do not land on the system drive.
 |---|---|---|
 | `specs/` | one folder per contract: `001-manifests/` … `006-service/`, each `spec.md` | W1–W5 |
 | `src/ms/` | the package: `compute_log.py`, then `data/`, `cache/`, `heads/`, `abstain/`, `eval/`, `service/` | W1–W5 |
-| `configs/` | `backbones/*.yaml`, `datasets/*.yaml` (downloads), `manifests/*.yaml` (manifest recipes, spec 001), `class_map_v1.yaml`, `heads/*.yaml`, `eval.yaml` | W1–W3 |
+| `configs/` | `backbones/*.yaml`, `datasets/*.yaml` (downloads), `manifests/*.yaml` (manifest recipes, spec 001), `class_map_v1.yaml`, `heads/*.yaml`, `eval.yaml`, `abstain.yaml`, `service.yaml` (the model the service answers with) | W1–W5 |
 | `tests/` | pytest; `fixtures/ibean_30/` runs on CPU | W1 onwards |
 | `results/` | `compute_log.jsonl` (N7), `n_table.jsonl` + `n_table.md` (the numbers), `verdict.md` — small, tracked in git | W1 onwards |
 | `cards/` | model cards, one per registered model | W5 |
@@ -97,6 +97,41 @@ the ECE bins and N3's held-out sources. Its sha256 is an input of every fit, so 
 is a new fit — and, because a row's identity carries no fit, it has to be settled before the
 first N3 row is written (DECISIONS 91). A fit lands beside its run in
 `data/heads/<run_id>/abstain.json` (git-ignored) and writes one compute-log row.
+
+## The service (S4.6)
+
+The one thing other pieces call (`specs/006-service/spec.md`), and the interface H8 §6.2
+fixes: `POST /v1/predict`, `POST /v1/predict_batch`, `GET /v1/model` (the card summary) and
+`GET /v1/health`.
+
+```bash
+make serve                                      # uvicorn on 127.0.0.1:8000
+uv run python -m ms.service.example > request.json
+curl -s -H "content-type: application/json" -d @request.json http://127.0.0.1:8000/v1/predict
+curl -s http://127.0.0.1:8000/v1/model | python -m json.tool
+```
+
+A request is piece 1's `observation_frame` record (interface v0) plus `request_id` and
+`options`, checked against their schema file itself. A contract violation is HTTP 422 whose
+body still reads as a response — `decision` abstain, `abstain_reason` `invalid_input`, and
+the validator's reasons — so one consumer branch reads both outcomes, and a broken frame of
+a replayed batch costs only itself. The answer holds the temperature-scaled scores over the
+known classes, the decision and its reason, the uncertainty block of H8 §6.2, and
+`model_version`, which with `head.run_id` leads back to the exact run that answered.
+
+The bytes at `frame.uri` are hashed and the hash must equal `frame.sha256`, so a wrong hash
+cannot select another image's features. A hash the cache holds is answered without the
+backbone; anything else is embedded on the spot and rounded to float16 exactly as the cache
+stores it, so a replayed mission and a live frame are one model and not two.
+
+Which model that is comes from `configs/service.yaml` — the verdict's backbone
+(`dinov2_l14_reg` at 224 on CLS) and the owner's head and training manifests — never "the
+newest run under `data/heads`". The service refuses to start when the config resolves to no
+run, to several, or to a run without its `abstain.json`.
+
+Every request and response, the 422s included, is one JSON line of
+`data/predictions/requests.jsonl` (git-ignored; `MS_REQUEST_LOG`). Piece 3 moves those rows
+into its predictions table when it has one.
 
 ## The site probe (N4)
 

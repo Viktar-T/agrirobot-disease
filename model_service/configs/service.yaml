@@ -1,0 +1,44 @@
+# The model the service answers with (spec 006 US-10, FR-012). Not "the newest run":
+# with hundreds of runs under data/heads, newest is not a choice anybody made.
+#
+# The backbone, the resolution and the tokens are the verdict's (DECISIONS 108-109):
+# dinov2_l14_reg at 224 on CLS, because neither backbone won a criterion and anything else
+# goes to the champion. The head and the training manifests are the owner's choice of
+# 2026-09-20 (DECISIONS 114): the linear head trained on Makerere + iBean, which carries the
+# best cross-dataset number the champion has (N2 macro-F1 0.889 into Tanzania, against 0.861
+# for mix and 0.733 for proto) - and a demo frame is a frame the head has never seen, so N2
+# is the number that predicts how it behaves.
+#
+# A change of verdict, or of the owner's choice, is a change to this file and not to code.
+# `run_id` names one run outright and overrides everything below it.
+
+run_id: null
+backbone_id: dinov2_l14_reg
+res: 224
+tokens: cls
+head: linear
+seed: 0
+train_manifests: [makerere_v1, ibean_v1]
+
+# The operating point offered by default; a request may ask for another fitted coverage
+# (spec 004 US-3.1: 0.80, 0.90, 0.95), and an unfitted one is a 422.
+default_coverage: 0.90
+
+# At most this many frames in one POST /v1/predict_batch (US-6.3); the backbone configs' own
+# batch size is what a call is then split into.
+max_batch: 32
+
+# auto = the GPU when there is one, else the CPU with the same answers (H8 section 6.9).
+device: auto
+
+# Roots. Relative paths are from the repository root; MS_HEADS_ROOT, MS_CACHE_ROOT,
+# MS_DATA_ROOT, MS_REQUEST_LOG and MS_HEAD_RUN override them.
+heads_root: data/heads
+cache_root: data/cache
+data_root: data/raw
+backbone_configs: model_service/configs/backbones
+
+# One JSON line per request/response pair, the 422s included (US-9). Under data/, which is
+# git-ignored: it grows by a line per frame of every replayed mission. Piece 3 moves these
+# rows into the predictions table when it has one.
+request_log: data/predictions/requests.jsonl

@@ -71,8 +71,9 @@ NUMBERS = {
     "N7": "compute cost",
 }
 #: metric names (FR-005) and their qualifier: None (no qualifier), "class" (one of the row's
-#: classes), "optional" (a target, or nothing), "score" (one of spec 004's four scores) or
-#: "class?" (one of the row's classes, or nothing). S4.4 added the last five (spec 004 FR-009)
+#: classes), "optional" (a target, or nothing), "score" (one of spec 004's four scores),
+#: "class?" (one of the row's classes, or nothing) or "batch" (one of BATCH_NAMES). S4.4 added
+#: the five before the last (spec 004 FR-009), S4.6 added latency_ms (spec 006 FR-010)
 METRICS = {
     "macro_f1": None,
     "recall": "class",
@@ -82,10 +83,14 @@ METRICS = {
     "ece": None,
     "selective_risk": None,
     "abstention_rate": "class?",
+    "latency_ms": "batch",
 }
 #: the qualifier of auroc:<score> (spec 004 US-1.1); imported from ms.abstain would make the
 #: N-table depend on the abstention module, so the names are repeated here and tested there
 SCORE_NAMES = ("conf", "knn", "maha", "energy")
+#: the qualifier of latency_ms:<batch> (spec 006 FR-010): the batch sizes H8 §6.7 asks for, on
+#: the path that computes a frame's features and on the replay path that reads them from a cache
+BATCH_NAMES = ("b1", "b32", "cached_b1", "cached_b32")
 #: the seeds of a reported number, and the Student t quantile for their 95 % interval
 SEEDS = (0, 1, 2, 3, 4)
 T_975_4 = 2.776445
@@ -163,6 +168,8 @@ def _metric_ok(metric: Any, classes: Any) -> bool:
         return not sep or (isinstance(classes, list) and qualifier in classes)
     if kind == "score":
         return bool(sep) and qualifier in SCORE_NAMES
+    if kind == "batch":
+        return bool(sep) and qualifier in BATCH_NAMES
     return not sep or _text(qualifier)
 
 

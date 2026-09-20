@@ -2,11 +2,16 @@
 
 manifest (the committed fixture, spec 001) -> cache (spec 002, a tiny random-init backbone
 of the real class, as in test_cache.py) -> linear head (ms.heads.train) -> the N1 rows
-(ms.eval.run) -> POST /v1/predict with one cached image (ms.service.app). Specs 003, 005 and
-006 come in W3-W5; these tests pin what the slice already promises: the role gate, same seed
--> same weights, re-runs that do nothing, rows that carry their split rule and both
-manifest hashes (per class since spec 005), and a service that answers the interface v0
-record from the cache.
+(ms.eval.run) -> POST /v1/predict with one cached image (ms.service.app). These tests pin
+that the chain holds end to end: the role gate, same seed -> same weights, re-runs that do
+nothing, rows that carry their split rule and both manifest hashes (per class since spec
+005), and a service that answers the interface v0 record from the cache.
+
+The service's own contract is spec 006's, and `test_service.py` has it. What the slice
+promised before that spec existed has moved on with it (DECISIONS 37 -> 112-118): the served
+run is named, not "the newest"; a run without an `abstain.json` does not start; and a frame
+no cache holds is computed rather than refused. The three tests below are the chain's, not
+the contract's.
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ from fastapi.testclient import TestClient
 from transformers import Dinov2WithRegistersConfig, Dinov2WithRegistersModel
 
 from ms import compute_log
+from ms.abstain import fit as abstain_fit
 from ms.cache import extract as cache_extract
 from ms.eval import FIELDS as N_FIELDS
 from ms.eval import run as eval_run
@@ -206,18 +212,66 @@ def test_eval_writes_the_n1_rows_with_their_split_rule_and_both_hashes(
 # --- the service ------------------------------------------------------------------------------
 
 
+#: the fixture's validation slice is two rows (1 healthy, 1 rust), so 0.50 is the only
+#: coverage it can carry: spec 004 US-3.3 needs ceil(1 / (1 - c)) rows
+SLICE_COVERAGE = 0.50
+
+
 @pytest.fixture
 def client(tmp_path, capsys, cache_root):
     heads = tmp_path / "heads"
     assert train(capsys, cache_root, heads, "--allow-test-only")[0] == 0
-    settings = Settings(run=None, heads_root=heads, cache_root=cache_root, data_root=FIXTURE)
+    run_id = only_run(heads).name
+    config = tmp_path / "abstain.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "k": 3,
+                "coverages": [SLICE_COVERAGE],
+                "default_coverage": SLICE_COVERAGE,
+                "distance_tpr": 0.95,
+                "ece_bins": 15,
+                "epsilon": 1e-6,
+                "n3": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert (
+        abstain_fit.main(
+            [
+                "--run",
+                run_id,
+                "--heads-root",
+                str(heads),
+                "--cache-root",
+                str(cache_root),
+                "--config",
+                str(config),
+                "--compute-log",
+                str(tmp_path / "log.jsonl"),
+            ]  # fmt: skip
+        )
+        == 0
+    )
+    settings = Settings(
+        run=run_id,
+        heads_root=heads,
+        cache_root=cache_root,
+        data_root=FIXTURE,
+        backbone_configs=cache_root.parent / "backbones",
+        request_log=tmp_path / "requests.jsonl",
+        device="cpu",
+    )
     with TestClient(create_app(settings)) as c:
         yield c
 
 
 def a_request(split: str = "test") -> dict:
     row = next(r for r in manifest_rows() if r["split"] == split)
-    return request_for(row)
+    body = request_for(row)
+    body["options"]["coverage_target"] = SLICE_COVERAGE
+    return body
 
 
 def test_predict_answers_a_cached_frame(client):
@@ -230,7 +284,7 @@ def test_predict_answers_a_cached_frame(client):
     assert set(out["scores"]) == {"healthy", "rust"}
     assert sum(out["scores"].values()) == pytest.approx(1.0, abs=1e-5)
     assert out["top1"] == max(out["scores"], key=out["scores"].get)
-    assert (out["decision"], out["abstain_reason"], out["features"]) == ("predict", None, "cache")
+    assert out["decision"] in ("predict", "abstain") and out["features"] == "cache"
     assert out["model_version"].startswith(f"msv0.1+{BACKBONE}@28.linear.man-")
     assert out["backbone"]["input_res"] == 28 and out["head"]["id"] == "linear"
     assert "metadata.bbch is null" in out["warnings"]
@@ -271,13 +325,15 @@ def test_the_hash_is_recomputed_from_the_bytes_at_uri(client):
     assert client.post("/v1/predict", json=outside).status_code == 422
 
 
-def test_what_the_slice_does_not_serve_yet_is_501(client):
+def test_what_the_service_still_does_not_serve(client):
     body = a_request()
     body["frame"]["uri"] = "mcap://bag/camera/1"  # uri forms: open with piece 2 (W3)
     assert client.post("/v1/predict", json=body).status_code == 501
 
-    uncached = a_request()  # a real file under the data root whose hash no cache holds
-    uncached["frame"]["uri"] = "LICENSE-MIT"
-    uncached["frame"]["sha256"] = sha256(FIXTURE / "LICENSE-MIT")
-    r = client.post("/v1/predict", json=uncached)
-    assert r.status_code == 501 and "not in the feature cache" in r.json()["detail"]
+    # a real file under the data root that no cache holds is computed now (spec 006 US-4.2),
+    # so what is left is a file that is not an image at all: the decoder's reason, in a 422
+    not_an_image = a_request()
+    not_an_image["frame"]["uri"] = "LICENSE-MIT"
+    not_an_image["frame"]["sha256"] = sha256(FIXTURE / "LICENSE-MIT")
+    r = client.post("/v1/predict", json=not_an_image)
+    assert r.status_code == 422 and r.json()["errors"][0]["path"] == "frame.uri"

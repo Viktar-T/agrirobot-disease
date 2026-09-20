@@ -44,6 +44,7 @@ from ms.cache import find_cache, load_cache
 from ms.data.manifests import load_manifest
 from ms.heads import features, load_run
 from ms.heads import train as heads_train
+from ms.service import log as service_log
 from ms.service.app import Settings, create_app
 from ms.service.example import request_for
 
@@ -73,6 +74,8 @@ REASONS = ("low_confidence", "far_from_training")
 #: N6's qualifiers (FR-010): the two H8 asks for, and the replay path reported beside them
 LATENCY_QUALIFIERS = ("b1", "b32", "cached_b1", "cached_b32")
 DEFAULT_COVERAGE = 0.90
+#: settings_for's "the world's own service.yaml", so that None can mean "no config at all"
+_CONFIG = Path("<the world's service.yaml>")
 #: the contract violations of US-2.5, by the name of what each one breaks
 VIOLATIONS = [
     "missing_metadata_field", "pre_rename_frame_id", "yaw_in_degrees", "bbch_null_without_reason",
@@ -290,24 +293,31 @@ def world(tmp_path_factory) -> dict:
     }
 
 
-def settings_for(world: dict, **changes) -> Settings:
-    """The Settings the W5 service is built with; FR-012 makes the config file the source and
-    the environment an override, so a test names only the pieces it changes.
-
-    A field Settings does not have yet is dropped, so that each test fails on the behaviour
-    it is about instead of every test erroring on one constructor.
-    """
+def settings_for(world: dict, *, service: Path | None = _CONFIG, **changes) -> Settings:
+    """The Settings the W5 service is built with. FR-012 makes the config file the source and
+    the environment an override, so a test names only the pieces it changes; `service=None`
+    builds a Settings that names no run at all, which is what US-10.2 refuses."""
     root = world["root"]
-    fields = {
-        "run": world["run"]["run_id"],
-        "heads_root": root / "heads",
-        "cache_root": root / "cache",
-        "data_root": root / "raw",
-        "service": world["config"],
-    }
-    fields.update(changes)
-    known = {f.name for f in dataclasses.fields(Settings)}
-    return Settings(**{k: v for k, v in fields.items() if k in known})
+    if service is None:
+        base = Settings(
+            heads_root=root / "heads",
+            cache_root=root / "cache",
+            data_root=root / "raw",
+            request_log=root / "predictions" / "requests.jsonl",
+        )
+    else:
+        base = Settings.from_config(world["config"] if service is _CONFIG else service)
+    return dataclasses.replace(base, **changes)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def the_repositorys_request_log_is_never_written():
+    """A test writes its rows into its own tmp root, never into `data/predictions/` (US-9,
+    FR-012). The suite learnt this the hard way on `results/verdict.md` (DECISIONS 111)."""
+    before = service_log.REQUEST_LOG.read_bytes() if service_log.REQUEST_LOG.exists() else None
+    yield
+    after = service_log.REQUEST_LOG.read_bytes() if service_log.REQUEST_LOG.exists() else None
+    assert after == before, f"the tests wrote to {service_log.REQUEST_LOG}"
 
 
 @pytest.fixture
@@ -897,23 +907,6 @@ def fixture_world(tmp_path_factory) -> dict:
     }
 
 
-def settings_of(config: Path) -> Settings:
-    """`Settings.from_config` is FR-012's and comes with W5; until it does, the same values
-    reach today's constructor, so a test fails on the behaviour it is about and not on the
-    classmethod. US-10 has the tests that pin `from_config` itself."""
-    if hasattr(Settings, "from_config"):
-        return Settings.from_config(config)
-    cfg = yaml.safe_load(Path(config).read_text(encoding="utf-8"))
-    fields = {
-        "run": cfg.get("run_id"),
-        "heads_root": Path(cfg["heads_root"]),
-        "cache_root": Path(cfg["cache_root"]),
-        "data_root": Path(cfg["data_root"]),
-    }
-    known = {f.name for f in dataclasses.fields(Settings)}
-    return Settings(**{k: v for k, v in fields.items() if k in known})
-
-
 @pytest.fixture
 def fixture_client(fixture_world):
     raw = fixture_world["root"] / "raw"
@@ -923,16 +916,20 @@ def fixture_client(fixture_world):
         target = raw / Path(row["path"]).name
         if not target.exists():
             target.write_bytes((FIXTURE / row["path"]).read_bytes())
-    with TestClient(create_app(settings_of(fixture_world["config"]))) as c:
+    with TestClient(create_app(Settings.from_config(fixture_world["config"]))) as c:
         yield c
 
 
 def fixture_request(fixture_world: dict, *, unseen: bool) -> dict:
     row = fixture_world["cached_row"]
-    if not unseen:
-        return request_for({**row, "path": Path(row["path"]).name})
-    path = fixture_world["unseen"]
-    return request_for({**row, "image_id": "unseen", "path": path.name, "sha256": sha256(path)})
+    if unseen:
+        path = fixture_world["unseen"]
+        row = {**row, "image_id": "unseen", "path": path.name, "sha256": sha256(path)}
+    else:
+        row = {**row, "path": Path(row["path"]).name}
+    body = request_for(row)
+    body["options"]["coverage_target"] = 0.50  # the only one this world can carry
+    return body
 
 
 def test_an_uncached_frame_is_computed_on_request(fixture_client, fixture_world):
