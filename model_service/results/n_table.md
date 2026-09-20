@@ -3168,6 +3168,27 @@ pipeline (for example the W2 slice, trained on a test-only manifest).
 | dinov2_l14_reg | 224 | cls | logreg | 0 | makerere_v1 (cv5) → makerere_v1 (cv5) | balanced_accuracy:district (chance 0.083) | 0.767 | 0.749–0.787 | 1.00 | 10118 | `unblocked:5fold_by_phash_group` |  |
 | dinov3_l16 | 224 | cls | logreg | 0 | makerere_v1 (cv5) → makerere_v1 (cv5) | balanced_accuracy:district (chance 0.083) | 0.770 | 0.746–0.795 | 1.00 | 10118 | `unblocked:5fold_by_phash_group` |  |
 
+## N6 — latency
+
+| backbone | res | tokens | head | seed | train → test | metric | value | 95 % CI | coverage | n | split rule | |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| dinov2_l14_reg | 224 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:b1 | 115.806 | 81.560–149.018 | 1.00 | 256 | `blocked:district` |  |
+| dinov2_l14_reg | 224 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:b32 | 31.124 | 28.029–33.809 | 1.00 | 256 | `blocked:district` |  |
+| dinov2_l14_reg | 224 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:cached_b1 | 43.349 | 42.196–53.006 | 1.00 | 256 | `blocked:district` |  |
+| dinov2_l14_reg | 224 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:cached_b32 | 3.835 | 3.780–4.437 | 1.00 | 256 | `blocked:district` |  |
+| dinov2_l14_reg | 518 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:b1 | 137.455 | 120.898–210.279 | 1.00 | 256 | `blocked:district` |  |
+| dinov2_l14_reg | 518 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:b32 | 81.879 | 77.463–89.422 | 1.00 | 256 | `blocked:district` |  |
+| dinov2_l14_reg | 518 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:cached_b1 | 45.690 | 43.122–53.361 | 1.00 | 256 | `blocked:district` |  |
+| dinov2_l14_reg | 518 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:cached_b32 | 3.743 | 3.672–3.792 | 1.00 | 256 | `blocked:district` |  |
+| dinov3_l16 | 224 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:b1 | 133.986 | 95.987–182.548 | 1.00 | 256 | `blocked:district` |  |
+| dinov3_l16 | 224 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:b32 | 31.416 | 27.281–34.069 | 1.00 | 256 | `blocked:district` |  |
+| dinov3_l16 | 224 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:cached_b1 | 47.582 | 44.860–58.390 | 1.00 | 256 | `blocked:district` |  |
+| dinov3_l16 | 224 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:cached_b32 | 3.909 | 3.857–4.408 | 1.00 | 256 | `blocked:district` |  |
+| dinov3_l16 | 512 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:b1 | 136.149 | 116.554–205.504 | 1.00 | 256 | `blocked:district` |  |
+| dinov3_l16 | 512 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:b32 | 76.884 | 73.294–84.366 | 1.00 | 256 | `blocked:district` |  |
+| dinov3_l16 | 512 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:cached_b1 | 44.892 | 42.347–55.593 | 1.00 | 256 | `blocked:district` |  |
+| dinov3_l16 | 512 | cls | linear | 0 | makerere_v1+ibean_v1 (train) → makerere_v1 (test) | latency_ms:cached_b32 | 4.182 | 3.964–4.617 | 1.00 | 256 | `blocked:district` |  |
+
 ## Superseded
 
 These rows stay in `n_table.jsonl`, marked; they are left out above and out of the

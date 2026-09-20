@@ -896,7 +896,8 @@ def test_bench_writes_the_n6_rows_and_a_compute_log_row(world, capsys):
             str(root / "log.jsonl"),
         ]  # fmt: skip
     )
-    assert code == 0, capsys.readouterr().out
+    out = capsys.readouterr()
+    assert code == 0, out.out + out.err
     rows = list(n_table.read_rows(root / "n6.jsonl"))
     assert rows and all(r["number"] == "N6" for r in rows)
     assert {r["metric"] for r in rows} <= {f"latency_ms:{q}" for q in LATENCY_QUALIFIERS}

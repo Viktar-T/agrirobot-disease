@@ -133,6 +133,27 @@ Every request and response, the 422s included, is one JSON line of
 `data/predictions/requests.jsonl` (git-ignored; `MS_REQUEST_LOG`). Piece 3 moves those rows
 into its predictions table when it has one.
 
+## Latency (N6)
+
+What a frame costs the service, per frame, at batch 1 and 32, for both backbones and both
+resolutions (H8 §6.7). It times the service's own functions — no HTTP server, because the
+transport is not what N6 measures — on a model built for each (backbone, resolution) that
+shares the served model's head, recipe, seed, tokens and training manifests.
+
+```bash
+make bench ARGS="--notes 'the GPU was idle and no other session was working'"
+make bench ARGS="--backbone dinov2_l14_reg --res 224 --batch 1 --path cache"
+```
+
+Four metrics per model: `latency_ms:b1` and `latency_ms:b32` are H8's N6, the cost of a frame
+the service has never seen (preprocess + backbone + head + the abstention scores);
+`cached_b1` and `cached_b32` are the replay path of H8 §6.9, the same frames answered from
+the cache. The value is the median per frame and the interval the 5th and 95th percentiles
+over the calls — one measurement with one seed, as N4 is, not a five-seed aggregate.
+
+N6 is **reported, never optimised for** (H8 §6.9) and never a tie-breaker (H9 §7 criterion 4).
+Measure it with nothing else on the GPU and say so: `--notes` goes into every row.
+
 ## The registry and the model card (H8 §6.8)
 
 Every head run is one MLflow run, in one experiment per backbone

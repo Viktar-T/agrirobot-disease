@@ -1860,3 +1860,41 @@ model the verdict names — the champion at 224 on CLS, with the owner's head an
        `model_version` carries no token type, so the 224/CLS model and the 224/CLS ⊕
        mean-patch model share a string and a card path — H8 §6.2 fixes that format, piece 1
        reads it, and the run id is what tells the two apart in the meantime.
+
+## 2026-09-20 — W5 · N6, the latency (ahead of schedule)
+
+The work plan's W5 "N6". `ms.service.bench` (`make bench`) times the service's own functions —
+no HTTP server, because the transport is not what N6 measures — on a model built for each
+(backbone, resolution) that shares the served model's head, recipe, seed, tokens and training
+manifests. 16 rows: four metrics for each of the four models, on 256 frames of Makerere's test
+split, the same frames for every model. 275 s of GPU time in all. Measured with the GPU idle
+and no other session working, which every row's `notes` says.
+
+132. **At batch 1 the abstention scoring is most of the cost, not the backbone.** The replay
+     path — no backbone at all, features read from the cache — costs **43–48 ms per frame**,
+     and the live path 116–137 ms. So a fixed ~45 ms sits under every number at batch 1: the
+     kNN query against 7,422 training features and the relative Mahalanobis, once per call.
+     - It is why the four models are within 20 ms of each other at batch 1 although their
+       resolutions differ by a factor of five. The backbone is not what a single frame waits
+       for.
+133. **At batch 32 it amortises and the backbone shows through.** The fixed cost falls to
+     **3.7–4.2 ms** per frame on the replay path, and the live path splits by resolution:
+     **31.1 ms** (DINOv2 @ 224) and **31.4 ms** (DINOv3 @ 224) against **81.9 ms** (DINOv2 @
+     518) and **76.9 ms** (DINOv3 @ 512).
+     - **N6 does not separate the backbones**: 0.3 ms apart at 224 and 5 ms at high
+       resolution, on numbers of 31 and 80. H9 §7 makes N6 reported and not a tie-breaker
+       (criterion 4), and the measurement bears that out rather than merely obeying it.
+     - **The cache is worth what H8 §6.9 says it is**: a replayed frame costs 3.8 ms against
+       31 ms live, eight times less, and needs no GPU at all. A thousand-frame mission is 31 s
+       live and 4 s replayed. That is why the demo does not depend on a GPU.
+134. **What these numbers are not.** `[C123]` measured 144 ms (DINOv2-L) and 109 ms (DINOv3-L)
+     at batch 1 on an RTX 3070, and ours are 116 and 134 ms at 224 on a 5060 — but the two are
+     not comparable: ours are the **service's** cost, preprocessing, the backbone, the head and
+     both abstention scores, and theirs is a forward pass. The article should quote ours as
+     what a frame costs the service and say so.
+     - The row's `n` is the frames timed, its value the median per frame and its interval the
+       5th and 95th percentiles **over the calls** — one measurement with one seed and no
+       five-seed aggregate, as N4 has (54). A second `make bench` adds nothing.
+     - H8 §6.9's latency budget is "none that matters": the service sits behind the map, not
+       in the robot's control loop. Nothing here was optimised, and the obvious thing to
+       optimise — the per-call kNN — is left alone on purpose until something needs it.

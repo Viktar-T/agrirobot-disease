@@ -8,7 +8,7 @@ cannot drift from the numbers it quotes. Do not edit a rendered card by hand: `m
 register` refuses a card that differs from what the artefacts render now.
 -->
 
-**Status**: registered · **Generated**: 2026-09-20T13:42:08Z · **Rendered from**: `8f9ffe4 + uncommitted changes`
+**Status**: registered · **Generated**: 2026-09-20T13:57:42Z · **Rendered from**: `b581f37 + uncommitted changes`
 **Run**: `dinov2_l14_reg-224-linear-cls-s0-89fe37fe` · **Served by**: `model_service/configs/service.yaml`
 
 *A card cannot carry the sha of the commit that will contain it, so the one above says
@@ -161,7 +161,12 @@ A held-out class can be a new **disease** without being a new **dataset**: angul
 
 ### N6 — latency
 
-_None._
+| Metric | Value | 95 % interval | Tested on | Split rule | n |
+|---|---|---|---|---|---|
+| `latency_ms:b1` | 115.8060 | [81.5600, 149.0183] | `makerere_v1` / test | `blocked:district` | 256 |
+| `latency_ms:b32` | 31.1242 | [28.0285, 33.8090] | `makerere_v1` / test | `blocked:district` | 256 |
+| `latency_ms:cached_b1` | 43.3488 | [42.1960, 53.0056] | `makerere_v1` / test | `blocked:district` | 256 |
+| `latency_ms:cached_b32` | 3.8346 | [3.7804, 4.4367] | `makerere_v1` / test | `blocked:district` | 256 |
 
 ### Selective risk, by declared coverage
 
@@ -171,7 +176,7 @@ _None._
 | 0.90 | 0.0202 | [0.0160, 0.0245] | `tanzania_v1` / test |
 | 0.95 | 0.0346 | [0.0290, 0.0402] | `tanzania_v1` / test |
 
-**Not measured for this model**: N1, N6. An honest blank, not a zero — see `docs/piece4-work-plan.md` and `model_service/DECISIONS.md` for why.
+**Not measured for this model**: N1. An honest blank, not a zero — see `docs/piece4-work-plan.md` and `model_service/DECISIONS.md` for why.
 <!-- evaluation:end -->
 
 ## Operating point

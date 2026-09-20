@@ -15,7 +15,7 @@ RES ?= 224
 ARGS ?=
 
 .DEFAULT_GOAL := help
-.PHONY: help env env-check hub-check compute-log test lint fmt download manifests cache heads abstain eval card register probe serve clean
+.PHONY: help env env-check hub-check compute-log test lint fmt download manifests cache heads abstain eval card register bench probe serve clean
 
 help: ## list the targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-13s\033[0m %s\n", $$1, $$2}'
@@ -75,6 +75,9 @@ card: ## (W5, S4.6) render cards/<model_version>.md from the run, its fit and th
 register: ## (W5, H8 6.8) log the head runs to MLflow, and register one -- only with a card
 	$(PY) -m ms.registry log $(ARGS)
 	$(PY) -m ms.registry register $(ARGS)
+
+bench: ## (W5, N6) latency per frame at batch 1 and 32, both backbones, both resolutions
+	$(PY) -m ms.service.bench $(ARGS)
 
 probe: ## (W2, N4) site-prediction probe on cached features
 	$(PY) -m ms.eval.probe $(ARGS)

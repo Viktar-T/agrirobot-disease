@@ -27,7 +27,7 @@ $py = @('uv', 'run', 'python')
 
 switch ($Target) {
     'help' {
-        Write-Host 'targets: env, compute-log, env-check, hub-check, test, lint, fmt, download, manifests, cache, heads, abstain, eval, card, register, probe, serve, clean'
+        Write-Host 'targets: env, compute-log, env-check, hub-check, test, lint, fmt, download, manifests, cache, heads, abstain, eval, card, register, bench, probe, serve, clean'
     }
     'env' {
         Invoke-Step @('uv', 'sync')
@@ -62,6 +62,7 @@ switch ($Target) {
         Invoke-Step ($py + @('-m', 'ms.registry', 'log') + $ArgsRest)
         Invoke-Step ($py + @('-m', 'ms.registry', 'register') + $ArgsRest)
     }
+    'bench'     { Invoke-Step ($py + @('-m', 'ms.service.bench') + $ArgsRest) }
     'probe'     { Invoke-Step ($py + @('-m', 'ms.eval.probe') + $ArgsRest) }
     'serve'     { Invoke-Step @('uv', 'run', 'uvicorn', 'ms.service.app:app', '--host', '127.0.0.1', '--port', '8000') }
     'clean' {
