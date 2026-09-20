@@ -19,7 +19,7 @@ from synthetic import BACKBONE, COUNTS, RES, make_manifest, rows_of, sha256
 
 import ms.eval as n_table
 from ms.eval import run as eval_run
-from ms.eval import supersede
+from ms.eval import supersede, verdict
 from ms.heads import HEAD_CONFIGS
 from ms.heads import train as heads_train
 
@@ -474,3 +474,282 @@ def test_the_md_shows_the_aggregates_and_the_rows_no_aggregate_covers():
     n1 = md.split("## N1")[1].split("\n## ")[0]
     assert n1.count("| 0–4 |") == 1 and n1.count("| linear |") == 1
     assert "## N4" in md and "balanced_accuracy:dataset" in md
+
+
+# --- the verdict (US-6) ------------------------------------------------------------------------
+
+CHAMP, CHALL = verdict.CHAMPION, verdict.CHALLENGER
+#: the three frame directions of US-6.3, and the crop-level one that is reported, not counted
+DIRECTIONS = [
+    {"train": ["tanzania_v1"], "test": "makerere_v1", "split": "test",
+     "classes": ["healthy", "rust"]},
+    {"train": ["tanzania_v1"], "test": "makerere_crops_v1", "split": "test",
+     "classes": ["healthy", "rust"], "metrics": ["recall:rust"]},
+    {"train": ["tanzania_v1"], "test": "ibean_v1", "split": "all", "classes": ["healthy", "rust"]},
+    {"train": ["makerere_v1", "ibean_v1"], "test": "tanzania_v1", "split": "test",
+     "classes": ["healthy", "rust"]},
+]  # fmt: skip
+N2_PAIRS = [("tanzania_v1", "makerere_v1"), ("tanzania_v1", "ibean_v1"),
+            ("makerere_v1+ibean_v1", "tanzania_v1")]  # fmt: skip
+TRAIN_SETS = ("makerere_v1", "tanzania_v1", "makerere_v1+ibean_v1")
+
+
+def man(stems: str) -> tuple[str, str]:
+    """('data/manifests/a_v1.jsonl+...', 'aaa...+...'): a row's manifest and hash fields."""
+    parts = stems.split("+")
+    return (
+        "+".join(f"data/manifests/{s}.jsonl" for s in parts),
+        "+".join(chr(ord("a") + i) * 64 for i, _ in enumerate(parts)),
+    )
+
+
+def n2_row(backbone, head, train, test, value, half=0.005, **changes):
+    train_m, train_h = man(train)
+    test_m, test_h = man(test)
+    changes.setdefault("seed", None)
+    changes.setdefault("ci_low", round(value - half, 4))
+    changes.setdefault("ci_high", round(value + half, 4))
+    return row(
+        number="N2", metric="macro_f1", backbone_id=backbone, head=head, value=value,
+        train_manifest=train_m, train_manifest_sha256=train_h,
+        test_manifest=test_m, test_manifest_sha256=test_h,
+        test_split="test", classes=["healthy", "rust"],
+        run_id=f"{backbone}-224-{head}-cls-s0-1+{backbone}-224-{head}-cls-s4-2", **changes,
+    )  # fmt: skip
+
+
+def n3_row(backbone, head, held, score, train, value, **changes):
+    train_m, train_h = man(train)
+    changes.setdefault("seed", None)
+    changes.setdefault("ci_low", round(value - 0.001, 4))
+    changes.setdefault("ci_high", round(value + 0.001, 4))
+    return row(
+        number="N3", metric=f"auroc:{score}", backbone_id=backbone, head=head, value=value,
+        train_manifest=train_m, train_manifest_sha256=train_h,
+        test_manifest="data/manifests/swm_v1.jsonl", test_manifest_sha256="f" * 64,
+        test_split="holdout_unknown", split_rule="holdout_unknown", classes=[held],
+        run_id=f"{backbone}-224-{head}-cls-s0-1+{backbone}-224-{head}-cls-s4-2", **changes,
+    )  # fmt: skip
+
+
+def table_for(n2_value, n3_value):
+    """A whole table: `n2_value(backbone, head, direction)` gives (value, half-interval) and
+    `n3_value(backbone, head, held-out, score, training set)` gives an AUROC."""
+    rows = []
+    for backbone in (CHAMP, CHALL):
+        for head in verdict.HEADS:
+            for where in N2_PAIRS:
+                value, half = n2_value(backbone, head, where)
+                rows.append(n2_row(backbone, head, where[0], where[1], value, half))
+            for held in verdict.HELD_OUT:
+                for score in ("conf", "knn"):
+                    for train in TRAIN_SETS:
+                        rows.append(
+                            n3_row(
+                                backbone, head, held, score, train,
+                                n3_value(backbone, head, held, score, train),
+                            )
+                        )  # fmt: skip
+    return rows
+
+
+def flat(champion, challenger, half=0.005):
+    """Every N2 number at one value per backbone."""
+    return lambda b, h, d: (champion if b == CHAMP else challenger, half)
+
+
+def verdict_of(rows):
+    return verdict.decide(rows, DIRECTIONS)
+
+
+def test_neither_wins_a_criterion_so_the_champion_keeps_it():
+    """US-6.6: anything else, no wins at all included, goes to the champion."""
+    v = verdict_of(table_for(flat(0.50, 0.50), lambda *a: 0.80))
+    assert v["c1"][CHALL]["won"] is False and v["c1"][CHAMP]["won"] is False
+    assert v["c2"][CHALL]["won"] is False and v["c2"][CHAMP]["won"] is False
+    assert v["winner"] == CHAMP
+    assert "neither" in v["why"]
+
+
+def test_the_challenger_wins_criterion_1_and_takes_the_verdict():
+    """US-6.3: 2 pp on the mean, and two directions ahead by 2 pp with separated intervals."""
+    v = verdict_of(table_for(flat(0.50, 0.55), lambda *a: 0.80))
+    assert v["c1"][CHALL]["won"] is True and v["c1"][CHAMP]["won"] is False
+    assert v["winner"] == CHALL and "challenger" in v["why"]
+
+
+def test_a_lead_with_overlapping_intervals_does_not_win_criterion_1():
+    """US-6.3: the five-seed intervals have to separate in two of the three directions."""
+    v = verdict_of(table_for(flat(0.50, 0.55, half=0.05), lambda *a: 0.80))
+    assert v["c1"][CHALL]["won"] is False
+    assert all(h["clear"] == 0 for h in v["c1"][CHALL]["heads"].values())
+    assert v["winner"] == CHAMP
+
+
+def test_a_lead_on_the_mean_alone_does_not_win_criterion_1():
+    """US-6.3: ahead on the mean because of one direction, and level in the other two."""
+
+    def n2(backbone, head, direction):
+        if backbone == CHAMP:
+            return 0.50, 0.005
+        return (0.62, 0.005) if direction == N2_PAIRS[0] else (0.50, 0.005)
+
+    v = verdict_of(table_for(n2, lambda *a: 0.80))
+    assert v["c1"][CHALL]["heads"]["linear"]["ahead"] >= 0.02
+    assert v["c1"][CHALL]["heads"]["linear"]["clear"] == 1
+    assert v["c1"][CHALL]["won"] is False and v["winner"] == CHAMP
+
+
+def test_the_challenger_wins_criterion_2_only_with_every_training_set():
+    """US-6.4 and the owner's reading of 2026-09-20: each head, each held-out set, both
+    decision scores and each of the three training sets."""
+
+    def ahead(backbone, head, held, score, train):
+        return 0.85 if backbone == CHALL else 0.80
+
+    v = verdict_of(table_for(flat(0.50, 0.50), ahead))
+    assert v["c2"][CHALL]["won"] is True and v["winner"] == CHALL
+
+    def all_but_one(backbone, head, held, score, train):
+        if backbone == CHAMP:
+            return 0.80
+        one = (head, held, score, train) == ("mix", "unknown_wm", "knn", "tanzania_v1")
+        return 0.805 if one else 0.85
+
+    v = verdict_of(table_for(flat(0.50, 0.50), all_but_one))
+    assert v["c2"][CHALL]["won"] is False
+    assert v["c2"][CHALL]["cleared"] == v["c2"][CHALL]["of"] - 1
+    assert v["winner"] == CHAMP
+
+
+def test_criterion_2_needs_both_decision_scores_and_ignores_the_others():
+    """US-6.4: confidence and kNN distance. maha and energy are reported, not counted."""
+
+    def one_score(backbone, head, held, score, train):
+        if backbone == CHAMP:
+            return 0.80
+        return 0.85 if score == "knn" else 0.80
+
+    rows = table_for(flat(0.50, 0.50), one_score)
+    rows += [
+        n3_row(CHALL, "linear", "unknown_wm", "maha", "tanzania_v1", 0.99),
+        n3_row(CHAMP, "linear", "unknown_wm", "maha", "tanzania_v1", 0.10),
+    ]
+    v = verdict_of(rows)
+    assert v["c2"][CHALL]["won"] is False
+    assert all(c["key"][2] in verdict.DECISION_SCORES for c in v["c2"][CHALL]["comparisons"])
+
+
+def probe_rows(backbone, dataset, district):
+    return [
+        row(number="N4", metric=f"balanced_accuracy:{t}", backbone_id=backbone, head="logreg",
+            seed=None, value=v, ci_low=round(v - 0.01, 4), ci_high=round(v + 0.01, 4),
+            test_split="cv5", split_rule="unblocked:5fold_by_phash_group",
+            classes=["a", "b", "c"], run_id=f"n4-{t}-{backbone}", model_version=None)
+        for t, v in (("dataset", dataset), ("district", district))
+    ]  # fmt: skip
+
+
+def test_a_split_goes_to_n4_and_a_tie_to_the_champion():
+    """US-6.6: each backbone wins a criterion, so the probe decides — and only when one is
+    2 pp lower on both targets."""
+    rows = table_for(flat(0.50, 0.55), lambda b, *a: 0.85 if b == CHAMP else 0.80)
+    assert verdict_of(rows)["c1"][CHALL]["won"] and verdict_of(rows)["c2"][CHAMP]["won"]
+    # the challenger gives the site away less on both targets: it takes the split
+    v = verdict_of(rows + probe_rows(CHALL, 0.70, 0.60) + probe_rows(CHAMP, 0.80, 0.70))
+    assert v["winner"] == CHALL and "N4 broke the split" in v["why"]
+    # lower on one target only: the split stands, and a tie goes to the champion
+    v = verdict_of(rows + probe_rows(CHALL, 0.70, 0.70) + probe_rows(CHAMP, 0.80, 0.70))
+    assert v["winner"] == CHAMP and "did not break the split" in v["why"]
+    # no probe rows at all: the same
+    assert verdict_of(rows)["winner"] == CHAMP
+
+
+def test_the_verdict_reads_only_224_cls_coverage_one_quotable_current_rows():
+    """US-6.1. Every other row is invisible to it, whatever it says."""
+    rows = table_for(flat(0.50, 0.50), lambda *a: 0.80)
+    loud = [
+        n2_row(CHALL, "linear", "tanzania_v1", "makerere_v1", 0.99, res=518),
+        n2_row(CHALL, "linear", "tanzania_v1", "makerere_v1", 0.99, token_type="cls+meanpatch"),
+        n2_row(CHALL, "linear", "tanzania_v1", "makerere_v1", 0.99, coverage=0.9),
+        n2_row(CHALL, "linear", "tanzania_v1", "makerere_v1", 0.99, quotable=False),
+        n2_row(CHALL, "linear", "tanzania_v1", "makerere_v1", 0.99, superseded="a new recipe"),
+        n2_row(CHALL, "linear", "tanzania_v1", "makerere_v1", 0.99, seed=0, ci_low=None,
+               ci_high=None),
+    ]  # fmt: skip
+    assert verdict_of(rows + loud)["winner"] == CHAMP
+    assert verdict_of(rows + loud)["rows_read"] == verdict_of(rows)["rows_read"]
+
+
+def test_the_crop_direction_is_reported_and_not_counted():
+    """US-6.3: it measures one class's recall, not the macro-F1 H9 names."""
+    assert verdict.counted(DIRECTIONS) == N2_PAIRS
+    rows = table_for(flat(0.50, 0.50), lambda *a: 0.80)
+    rows += [n2_row(CHALL, h, "tanzania_v1", "makerere_crops_v1", 0.99) for h in verdict.HEADS]
+    v = verdict_of(rows)
+    assert v["c1"][CHALL]["won"] is False
+    assert all(len(h["directions"]) == 3 for h in v["c1"][CHALL]["heads"].values())
+
+
+def test_a_missing_number_never_wins_a_criterion():
+    """US-6.3 and US-6.4: a win needs every head, and every comparison it names."""
+
+    def n3(backbone, *rest):
+        return 0.85 if backbone == CHALL else 0.80
+
+    rows = [
+        r
+        for r in table_for(flat(0.50, 0.55), n3)
+        if not (r["head"] == "proto" and r["number"] == "N2")
+    ]
+    v = verdict_of(rows)
+    assert v["c1"][CHALL]["heads"]["proto"]["complete"] is False
+    assert v["c1"][CHALL]["won"] is False and v["c2"][CHALL]["won"] is True
+    assert v["winner"] == CHALL  # criterion 2 alone still wins it
+
+    rows = [
+        r
+        for r in table_for(flat(0.50, 0.50), n3)
+        if not (r["head"] == "proto" and r["number"] == "N3")
+    ]
+    v = verdict_of(rows)
+    assert v["c2"][CHALL]["complete"] is False and v["c2"][CHALL]["won"] is False
+    assert v["winner"] == CHAMP
+
+
+def test_verdict_md_is_written_by_code_and_only_when_it_changes(tmp_path):
+    """US-6.1: `make eval` writes it, nobody edits it, and it is rewritten only when the
+    numbers move."""
+    path = tmp_path / "verdict.md"
+    rows = table_for(flat(0.50, 0.50), lambda *a: 0.80)
+    written, v = verdict.write_verdict(rows, DIRECTIONS, path)
+    assert written is True and v["winner"] == CHAMP
+    text = path.read_text(encoding="utf-8")
+    assert "dinov2_l14_reg wins" in text.split("\n")[2]
+    assert "do not edit" in text and "H9 §7" in text
+    assert "## Criterion 1" in text and "## Criterion 2" in text and "## Outcome" in text
+    assert "research-only until H6 C5" in text
+    assert verdict.write_verdict(rows, DIRECTIONS, path) == (False, v)
+    assert path.read_text(encoding="utf-8") == text
+
+    moved = table_for(flat(0.50, 0.55), lambda *a: 0.80)
+    written, v = verdict.write_verdict(moved, DIRECTIONS, path)
+    assert written is True and v["winner"] == CHALL
+    assert "dinov3_l16 wins" in path.read_text(encoding="utf-8").split("\n")[2]
+
+
+def test_make_eval_refuses_the_verdict_while_a_number_is_unpaired(tmp_path, capsys):
+    """US-6.1 and US-4.1: an unpaired number means the table is half-written."""
+    argv = [
+        "--heads-root", str(tmp_path / "heads"), "--cache-root", str(tmp_path / "cache"),
+        "--manifest-root", str(tmp_path / "manifests"), "--config", str(tmp_path / "eval.yaml"),
+        "--n-table", str(tmp_path / "n_table.jsonl"), "--md", str(tmp_path / "n_table.md"),
+        "--verdict", str(tmp_path / "verdict.md"), "--compute-log", str(tmp_path / "log.jsonl"),
+    ]  # fmt: skip
+    (tmp_path / "eval.yaml").write_text("n2: []\n", encoding="utf-8")
+    # an N1 aggregate with no N2 beside it: unpaired, so no verdict is written
+    n_table.append_rows(n_table.aggregate(five()), tmp_path / "n_table.jsonl")
+    assert eval_run.main(argv) == 0
+    text = capsys.readouterr().out
+    assert "unpaired:" in text and "verdict: refused" in text
+    assert not (tmp_path / "verdict.md").exists()

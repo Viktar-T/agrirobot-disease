@@ -62,6 +62,7 @@ from ms.eval import (
     unpaired,
     write_md,
 )
+from ms.eval.verdict import VERDICT_MD, write_verdict
 from ms.heads import HEADS_ROOT, Run, features, list_runs, load_run, resolve_path
 from ms.heads.train import macro_f1
 
@@ -611,6 +612,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--abstain-config", type=Path, default=abstain.ABSTAIN_CONFIG)
     p.add_argument("--n-table", type=Path, default=N_TABLE)
     p.add_argument("--md", type=Path, default=N_TABLE_MD)
+    p.add_argument("--verdict", type=Path, default=VERDICT_MD)
     p.add_argument("--compute-log", type=Path, default=compute_log.DEFAULT_LOG_PATH)
     args = p.parse_args(argv)
 
@@ -717,6 +719,24 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), flush=True)
         return 2
     rendered = write_md(args.md, args.n_table)
+    table = list(read_rows(args.n_table))
+    missing_pairs = unpaired(table)
+    for missing_pair in missing_pairs:
+        *key, number = missing_pair
+        print(f"unpaired: {' '.join(map(str, key))} has no {number} yet (spec 005 US-4.1)")
+    if missing_pairs:
+        print(
+            f"verdict: refused while {len(missing_pairs)} number(s) are unpaired "
+            f"(spec 005 US-6.1); {repo_relative(args.verdict)} not written",
+            flush=True,
+        )
+    else:
+        written, v = write_verdict(table, directions, args.verdict)
+        print(
+            f"{repo_relative(args.verdict)}: {v['winner']} wins - {v['why']} "
+            f"({'rewritten' if written else 'unchanged'})",
+            flush=True,
+        )
     if added:
         numbers = "/".join(sorted({r["number"] for r in new})) or "aggregates"
         compute_log.log_row(
@@ -728,9 +748,6 @@ def main(argv: list[str] | None = None) -> int:
             "aggregates",
             path=args.compute_log,
         )
-    for missing_pair in unpaired(read_rows(args.n_table)):
-        *key, number = missing_pair
-        print(f"unpaired: {' '.join(map(str, key))} has no {number} yet (spec 005 US-4.1)")
     print(
         f"{repo_relative(args.n_table)}: {added} row(s) added; "
         f"{repo_relative(args.md)} {'rewritten' if rendered else 'unchanged'}",

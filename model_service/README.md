@@ -37,7 +37,7 @@ optional `HF_HOME` so the checkpoints do not land on the system drive.
 | `src/ms/` | the package: `compute_log.py`, then `data/`, `cache/`, `heads/`, `abstain/`, `eval/`, `service/` | W1–W5 |
 | `configs/` | `backbones/*.yaml`, `datasets/*.yaml` (downloads), `manifests/*.yaml` (manifest recipes, spec 001), `class_map_v1.yaml`, `heads/*.yaml`, `eval.yaml` | W1–W3 |
 | `tests/` | pytest; `fixtures/ibean_30/` runs on CPU | W1 onwards |
-| `results/` | `compute_log.jsonl` (N7), `n_table.jsonl` + `n_table.md` (the numbers), later `verdict.md` — small, tracked in git | W1 onwards |
+| `results/` | `compute_log.jsonl` (N7), `n_table.jsonl` + `n_table.md` (the numbers), `verdict.md` — small, tracked in git | W1 onwards |
 | `cards/` | model cards, one per registered model | W5 |
 
 ## The pipeline (the W2 vertical slice)

@@ -1484,3 +1484,48 @@ now holds N1–N3 at both resolutions, which is H8 §6.11's third acceptance cri
        champion leads the challenger on the N2 mean over the three frame directions by 0.96 to
        2.31 pp with all three heads, and the richer fingerprint widens that lead rather than
        closing it.
+## 2026-09-20 — W4 · the verdict: the champion keeps it (ahead of schedule)
+
+The work plan's W4 "Verdict". `ms.eval.verdict` computes it from the N-table alone as part of
+`make eval`, by the rules H9 §7 fixed on 2026-09-14 — before any number existed — and nobody
+edits `results/verdict.md` by hand. Spec 005 US-6 has its code and its 11 acceptance tests.
+
+108. **The verdict: `dinov2_l14_reg`, the champion, keeps it.** Neither backbone won either
+     criterion, and anything else goes to the champion (US-6.6).
+     - **Criterion 1 (N2)**: the challenger is *behind* on the mean over the three frame
+       directions with all three heads — linear −1.51 pp, proto −0.96 pp, mix −2.31 pp — so it
+       cannot win. Nor can the champion: its lead has to be at least 2 pp with **each** head,
+       and linear's 1.51 pp and proto's 0.96 pp are not. No direction has separated intervals
+       either: every one of the nine overlaps.
+     - **Criterion 2 (N3)**: the challenger clears the 0.02 bar in 14 of its 36 comparisons
+       and the champion in 6 of 36; a win needs all 36. The split is the one 100 describes —
+       the challenger is far ahead on the kNN distance for angular leaf spot (+0.2457 on the
+       Tanzania-trained runs) and behind on confidence for the same set (−0.0885 for linear).
+     - **The owner's reading of 2026-09-20** (asked for and given today): criterion 2 must hold
+       with **each of the three training sets**, not one of them and not their mean. The table
+       holds three AUROC aggregates per (backbone, head, held-out set) because a head is
+       trained on each set, and H9 names one. The strictest reading is the one that keeps the
+       champion (79), and criterion 1 already spans the same three sets through its three
+       directions. **It changes nothing here**: no backbone wins criterion 2 under any of the
+       three readings that were on the table, which is why the question was safe to settle
+       after the numbers existed rather than before.
+109. **What the verdict is, and is not.** It is `results/verdict.md`, rewritten only when the
+     numbers move, and it shows its working: every comparison it made, with both backbones'
+     values, so that a reader can check the rule against the table without running anything.
+     - It reads 306 rows: the quotable five-seed aggregates that are not superseded, at 224 px,
+       on CLS, at coverage 1.0 (US-6.1). The ablations of 104–107 sit beside those and never
+       in them.
+     - It refuses to run while `unpaired` lists anything (US-4.1), and `make eval` says so
+       instead of writing a half-informed verdict.
+     - The crop-level direction is reported and not counted, because it measures one class's
+       recall and not the macro-F1 H9 names (79). N6 is reported, not counted, and comes with
+       W5. The licence is a hard gate for anything that ships: DINOv3 is research-only until
+       H6 C5 is signed (13), which the outcome section states whatever the numbers say.
+     - **A winning challenger would have joined the model set, never evicted the champion**
+       (H8 D-7). It did not win, so nothing changes: the service of W5 serves DINOv2 at 224 on
+       CLS.
+110. **What decided it, in one line for the report.** DINOv3 is not 2 pp better than DINOv2 at
+     carrying a head across datasets — it is slightly worse — and its advantage at spotting
+     unknowns is real but partial: better on the distance score, worse on confidence, and only
+     on one of the two held-out sets. On the pre-declared rules that is not a win, and the rules
+     were written before anyone had seen a number.

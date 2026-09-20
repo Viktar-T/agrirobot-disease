@@ -1,6 +1,6 @@
 # Feature specification: 005 — Results table (the N-table)
 
-**Branch**: `005-results-table` · **Created**: 2026-09-19 · **Amended**: 2026-09-20 (US-8.5, a retired run is not scored again) · **Status**: Implemented 2026-09-19 with the W3 Heads task (`ms.eval`: row checks, aggregates, pairs, rendering; `ms.eval.run`: N1 per class) and the N2 task (US-7, `configs/eval.yaml`), and superseded rows with the owner's change of the head recipe (US-8, `ms.eval.supersede`); acceptance tests in `model_service/tests/test_n_table.py` green (DECISIONS 68, 74, 80). SC-2 met at 224 on 2026-09-19. The verdict (US-6) and its tests come with the W4 "Verdict" task.
+**Branch**: `005-results-table` · **Created**: 2026-09-19 · **Amended**: 2026-09-20 (US-8.5, a retired run is not scored again; US-6.4, criterion 2 reads every training set) · **Status**: Implemented 2026-09-19 with the W3 Heads task (`ms.eval`: row checks, aggregates, pairs, rendering; `ms.eval.run`: N1 per class) and the N2 task (US-7, `configs/eval.yaml`), and superseded rows with the owner's change of the head recipe (US-8, `ms.eval.supersede`); acceptance tests in `model_service/tests/test_n_table.py` green (DECISIONS 68, 74, 80). SC-2 met at 224 on 2026-09-19. The verdict (US-6) landed on 2026-09-20 with the W4 "Verdict" task (`ms.eval.verdict`, 11 acceptance tests; DECISIONS 108).
 **Input**: H8 §6.7 (results), H9 §7 (the verdict, copied verbatim in US-6), `docs/piece4-work-plan.md` S4.5, the W3–W4 tasks and §4 (seeds; criteria written before the numbers), DECISIONS 36 (the provisional row) and 54 (the N4 row), specs 001 (split rules, hashes, freeze) and 003 (runs). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
 
 ## Why
@@ -60,7 +60,7 @@ Exit codes: 0; 2 on an input error or an invalid row, with nothing appended.
 2. It shows every aggregate row, with its seeds shown as `0–4`. It also shows every per-seed row that no aggregate covers, such as N4 and the W2 slice. The per-seed rows behind an aggregate stay in the `.jsonl`. Superseded rows are counted at the end, by reason, and not shown (US-8).
 3. It is rewritten only when its text changes, and never by hand.
 
-### US-6: The verdict (P2; its code and tests come with the W4 "Verdict" task)
+### US-6: The verdict (P2; `ms.eval.verdict`, written on 2026-09-20)
 
 The rules are H9 §7's, copied verbatim below. H9 §7 was last changed on 2026-09-14, before any number existed (work plan §4). The owner settled its readings on 2026-09-19. Where H9 is silent or ambiguous, the reading is the one that keeps the champion, because "a tie goes to the champion" (DECISIONS 79).
 
@@ -71,7 +71,9 @@ The rules are H9 §7's, copied verbatim below. H9 §7 was last changed on 2026-0
 3. **Criterion 1: N2.** The metric is macro-F1 on the shared classes, in the three directions: Tanzania → Makerere (frames), Tanzania → iBean, Makerere + iBean → Tanzania. The crop-level rows (rust recall) are reported, not counted. The challenger wins criterion 1 when, with each of the three heads, both hold:
    - its mean over the three directions is at least 2 pp above the champion's;
    - in at least two of the three directions, it is at least 2 pp ahead and the two five-seed intervals do not overlap (its `ci_low` above the champion's `ci_high`).
-4. **Criterion 2: N3.** The challenger wins criterion 2 when, with each of the three heads, its AUROC is at least 0.02 higher on both decision scores, confidence and kNN distance. This must hold for each held-out set: angular leaf spot and white mould.
+4. **Criterion 2: N3.** The challenger wins criterion 2 when, with each of the three heads, its AUROC is at least 0.02 higher on both decision scores, confidence and kNN distance. This must hold for each held-out set: angular leaf spot and white mould, **and with each of the three training sets** — Makerere, Tanzania, and Makerere + iBean (the owner's decision of 2026-09-20).
+   - H9 §7 names one AUROC; the table holds three per (backbone, head, held-out set), one per training set, because a head is trained on each. The strictest reading is the one that keeps the champion (DECISIONS 79), and it is the one criterion 1 already takes: its three directions span the same three training sets. A mean over them would let a large win on one training set hide a loss on another.
+   - On the table of 2026-09-20 the reading changes nothing: no backbone wins either criterion under any of the three readings (DECISIONS 108).
 5. The champion wins a criterion by the same rule with the roles swapped.
 6. **Combining.**
    - The challenger wins when it wins criterion 1 or criterion 2 and the champion wins neither.
@@ -162,7 +164,7 @@ Source: `D:\Life-OS\FUND-GRANT\30_projects\AgriRobot\05_sourses\10.03_dr_choroby
 - **SC-1** Every row in `results/n_table.jsonl` passes `validate_row`, and a test checks the committed file.
 - **SC-2** Both backbones at 224 have N1 for the three heads × five seeds on `makerere_v1` and `tanzania_v1`, each number with its aggregate (W3 N1). N2 follows, in pairs with N1 (W3 N2).
 - **SC-3** Running `make eval` twice appends nothing the second time and leaves `n_table.md` unchanged.
-- **SC-4** `verdict.md` is written by code from the table alone (W4).
+- **SC-4** `verdict.md` is written by code from the table alone, and rewritten only when the numbers move (W4; met on 2026-09-20).
 
 ## Assumptions
 
