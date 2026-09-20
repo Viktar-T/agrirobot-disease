@@ -1340,3 +1340,91 @@ task, and the eval's rows of spec 004 US-6 to US-9 are still red.
     fits records `train_split: train` and `val_split: val` of its own training manifests, and
     every manifest it names is frozen. No test or held-out row was read while fitting (spec
     004 SC-2), which is what makes the N3 numbers of the next task worth anything.
+## 2026-09-20 — W4 · N3, the curve and the calibration error (ahead of schedule)
+
+The work plan's W4 "N3". `make eval` now writes everything spec 004 US-6 to US-9 asks for, and
+the table holds it for both backbones, the three heads, the three training sets and the two
+held-out sets. `tests/test_abstain.py` is green in full (55 tests). The ranges below are over
+the 18 quotable five-seed aggregates of a number (2 backbones × 3 heads × 3 training sets).
+
+98. **N3 exists.** 10,283 rows the first time, and the table now holds 6,188 current rows,
+    1,022 of them five-seed aggregates. Each held-out set is counted on its own (79):
+    angular leaf spot from `makerere_v1`, white mould from `swm_v1`.
+    - `unknown_recall` has a row per declared coverage; `auroc:<score>` carries coverage 1.0,
+      because an AUROC uses no threshold and the verdict reads coverage 1.0 (spec 005 US-6.1).
+    - The knowns of an AUROC row are the run's own in-domain test rows, so the row names both
+      manifests and their hashes. `auroc:knn` is identical for the three heads of one
+      (backbone, training set), as it must be: the distance does not depend on the head.
+    - `make eval` over 181 runs took 45 minutes the first time and 25 seconds when there is
+      nothing to add. The bank and a target's distances are computed once per group of runs
+      that share their features, and one group's bank is held at a time.
+99. **A bug in `make eval`, found by the rows landing and fixed: a retired run could join a
+    current aggregate.** S4.4 is the first task to add metrics to numbers that already
+    existed, and that is what exposed it.
+    - **What happened.** The 90 runs of the superseded 50-epoch recipe (80) were scored again,
+      because their rows did not have the new metrics yet. Their fresh rows carry no mark. The
+      coverage 1.0 ones had the identity of rows already in the table, so `append_rows`
+      dropped them — but `aggregate` had already seen them, and an unmarked fresh row stood in
+      for the current seed of its number. 1,025 aggregates were written naming a superseded
+      run, and the correct all-current aggregates were never formed.
+    - **Two fixes.** `ms.eval.run` now drops a row whose identity is in the table before it
+      aggregates; and a run whose every row in the table is marked is not scored again (spec
+      005 US-8.5, amended today). Together they make the trap unreachable, and they cut the
+      re-run from 45 minutes to 25 seconds.
+    - **The table was repaired with the table's own rule.** Rows are never deleted.
+      `ms.eval.supersede` was run again with the same two config sha256s and the same reason
+      text, marking 5,637 rows: the retired runs' new rows and the 1,025 wrong aggregates,
+      which name a retired run and are not to be quoted for exactly that reason. Then
+      `make eval` formed the correct aggregates. Afterwards no unmarked row names a retired
+      run, no current aggregate does, and a further `make eval` adds nothing.
+    - The cost is a table where 7,169 of 13,357 rows are marked. That is the honest record of
+      a recipe change and a bug, and `n_table.md` counts them at its end.
+    - A regression test reproduces the whole sequence on synthetic data: score, supersede,
+      retrain with another recipe, fit, score again, and assert that no current row names a
+      retired run (`test_a_superseded_run_never_joins_a_current_aggregate`).
+100. **White mould is caught; angular leaf spot is not.** This is the week's main finding, and
+     it is the number the report has to lead with.
+     - **White mould** (`swm_v1`, a different symptom family): `auroc:knn` 0.982–1.000 (median
+       0.998) and an unknown recall of 0.761–1.000 (median 0.995) at the default coverage
+       0.90. The distance score sees it almost perfectly.
+     - **Angular leaf spot** (`makerere_v1`): `auroc:knn` 0.444–0.690 (median 0.632), and an
+       unknown recall of 0.005–0.518 (median 0.190). One aggregate is **below chance**
+       (0.444, DINOv2 on Tanzania): for that head the held-out ALS photographs look *less*
+       strange than its own held-out test block.
+     - The two scores disagree, and in opposite directions on the two sets. On ALS the
+       confidence score is the better one (`auroc:conf` up to 0.947 for the Tanzania-trained
+       heads, median 0.675): the head is unsure about ALS even when the features are not far
+       from its training set. On white mould the confidence score is the weaker one for the
+       Makerere-trained heads (down to 0.620) while the distance score is at 0.99.
+     - The second opinion swaps sides too: relative Mahalanobis is the best ALS score (median
+       0.697) and a poor white-mould one (median 0.553). It is reported and never decides
+       (86), which is the right place for a score that disagrees this much with the one that
+       does.
+     - **What it does not show.** Nothing here says the model would spot ALS in a Polish
+       field. ALS is a leaf spot on a bean leaf photographed like the training photos; white
+       mould is a stem and pod disease from another dataset, so the easy number is the one
+       with the dataset shift in it. N4 already showed the features carry the site (54), and
+       the report has to say that the ALS number is the one closer to the question we care
+       about.
+101. **Calibration is excellent in domain and collapses out of it**, as H8 §6.6 says it would
+     (`[G49][C50]`). After temperature scaling, ECE is **0.001–0.012 (median 0.005)** on the
+     in-domain test split and **0.009–0.607 (median 0.367)** on the cross-dataset targets: a
+     factor of about 70 between the two medians. A number that is honest at home is not
+     honest away, and the service's probabilities have to be read with that in mind.
+102. **Abstention does not fall on the rarest class.** The caution of `[G73]`, answered with
+     a number: at the default coverage, in domain, the abstention rate is 0.005–0.061 (median
+     0.024) on anthracnose, the rarest trained class, against 0.018–0.083 (median 0.033) on
+     healthy and 0.026–0.168 (median 0.073) on **rust**, which is where abstention actually
+     falls. Nothing hides the rare disease; the model is least sure about rust.
+103. **What the operating point costs, in domain and out.** In domain the thresholds barely
+     bite: at a declared 0.90 the abstention rate on the test split is 0.025–0.069 (median
+     0.039), so the selective risk only falls from a median 0.005 to 0.001 at a declared 0.80.
+     Out of domain they bite hard: the same thresholds refuse a median **0.49** of the
+     cross-dataset rows at a declared 0.90. The declared coverage is a promise about the
+     in-domain validation slice (94) and nothing else, which is why `abstention_rate` is
+     written beside every `selective_risk` and why piece 5 should plot the curve against the
+     achieved coverage.
+     - One direction gets **worse** with abstention: Tanzania → Makerere crops, where the
+       selective risk rises from 0.52 at coverage 1.0 to 0.60 at a declared 0.80 while 90 % of
+       the rows are refused. There the scores keep the rows the head gets wrong. The crop rows
+       are reported and not counted (79), and this is one more reason why.

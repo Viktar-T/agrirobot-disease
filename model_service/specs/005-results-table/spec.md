@@ -1,6 +1,6 @@
 # Feature specification: 005 — Results table (the N-table)
 
-**Branch**: `005-results-table` · **Created**: 2026-09-19 · **Status**: Implemented 2026-09-19 with the W3 Heads task (`ms.eval`: row checks, aggregates, pairs, rendering; `ms.eval.run`: N1 per class) and the N2 task (US-7, `configs/eval.yaml`), and superseded rows with the owner's change of the head recipe (US-8, `ms.eval.supersede`); acceptance tests in `model_service/tests/test_n_table.py` green (DECISIONS 68, 74, 80). SC-2 met at 224 on 2026-09-19. The verdict (US-6) and its tests come with the W4 "Verdict" task.
+**Branch**: `005-results-table` · **Created**: 2026-09-19 · **Amended**: 2026-09-20 (US-8.5, a retired run is not scored again) · **Status**: Implemented 2026-09-19 with the W3 Heads task (`ms.eval`: row checks, aggregates, pairs, rendering; `ms.eval.run`: N1 per class) and the N2 task (US-7, `configs/eval.yaml`), and superseded rows with the owner's change of the head recipe (US-8, `ms.eval.supersede`); acceptance tests in `model_service/tests/test_n_table.py` green (DECISIONS 68, 74, 80). SC-2 met at 224 on 2026-09-19. The verdict (US-6) and its tests come with the W4 "Verdict" task.
 **Input**: H8 §6.7 (results), H9 §7 (the verdict, copied verbatim in US-6), `docs/piece4-work-plan.md` S4.5, the W3–W4 tasks and §4 (seeds; criteria written before the numbers), DECISIONS 36 (the provisional row) and 54 (the N4 row), specs 001 (split rules, hashes, freeze) and 003 (runs). Spec = contract + acceptance tests + protocol; no expected numbers on real data.
 
 ## Why
@@ -121,6 +121,7 @@ Source: `D:\Life-OS\FUND-GRANT\30_projects\AgriRobot\05_sourses\10.03_dr_choroby
 2. The new runs' rows are appended as usual, with `superseded = null`.
 3. The mark is not a per-seed field, so it is part of what makes seeds one number (US-2.1). Old and new seeds never share an aggregate.
 4. Superseded rows are left out of `unpaired`, out of `n_table.md`'s sections (the md counts them at its end), and out of the verdict.
+5. **A retired run is not scored again** (added on 2026-09-20 with S4.4, which is the first task to add metrics to numbers that already existed). A run whose every row in the table is marked is left out of `make eval`, which prints how many it skipped. Otherwise a later task's new metrics would be written for it unmarked, and its fresh rows — which have the identity of rows already in the table — would stand in for the current seeds of their number and put a superseded run id in a current aggregate, against US-8.3. `ms.eval.run` also drops a row whose identity is in the table before it aggregates, so that cannot happen by another route (DECISIONS 99).
 
 ### Edge cases
 

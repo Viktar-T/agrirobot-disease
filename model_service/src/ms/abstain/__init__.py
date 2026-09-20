@@ -314,17 +314,42 @@ def inputs_sha256(meta: dict[str, Any]) -> str:
 # --- scoring, deciding, calibrating (US-1, US-4, US-5) ------------------------------------------
 
 
-def scores(fit: Fit, run: Run, x: np.ndarray) -> dict[str, np.ndarray]:
-    """The four scores of US-1.1, one finite value per row of `x`."""
+def logit_scores(run: Run, x: np.ndarray) -> dict[str, np.ndarray]:
+    """The two scores that come from the head's logits alone: they cost nothing, and they are
+    the only two that change from one run of a group to the next."""
+    z = run.logits(x).astype(np.float64)
+    return {"conf": z.max(axis=1), "energy": -logsumexp(z)}
+
+
+def distance_scores(fit: Fit, x: np.ndarray) -> dict[str, np.ndarray]:
+    """The two scores that come from the training features: the same for every run whose bank
+    is the same, which is every head and seed of one (backbone, resolution, tokens,
+    manifests). `bank_key` is what makes two fits share them."""
     if fit.bank is None or fit.gaussians is None:
         raise AbstainError("bad_value", f"{fit.run_id}: the fit was loaded without its bank")
-    z = run.logits(x).astype(np.float64)
-    return {
-        "conf": z.max(axis=1),
-        "knn": knn_distance(fit.bank, x, fit.k),
-        "maha": fit.gaussians.distance(x),
-        "energy": -logsumexp(z),
-    }
+    return {"knn": knn_distance(fit.bank, x, fit.k), "maha": fit.gaussians.distance(x)}
+
+
+def bank_key(fit: Fit) -> tuple:
+    """What two fits share when their bank and their Gaussians are the same features."""
+    on, cache = fit.meta["fitted_on"], fit.meta["cache"]
+    return (
+        on["manifest_sha256"],
+        on["train_split"],
+        cache["cache_key"],
+        fit.meta["tokens"],
+        fit.k,
+        float(fit.meta["scores"]["maha"]["epsilon"]),
+        tuple(fit.meta["classes"]),
+    )
+
+
+def scores(
+    fit: Fit, run: Run, x: np.ndarray, distances: dict[str, np.ndarray] | None = None
+) -> dict[str, np.ndarray]:
+    """The four scores of US-1.1, one finite value per row of `x`. `distances` are the two
+    feature-space scores when a caller has them already."""
+    return {**logit_scores(run, x), **(distances or distance_scores(fit, x))}
 
 
 def decide(fit: Fit, row: dict[str, float], coverage: float) -> tuple[str, str | None]:

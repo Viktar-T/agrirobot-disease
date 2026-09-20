@@ -20,13 +20,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 import yaml
-from synthetic import BACKBONE, COUNTS, RES, direction, make_manifest, write_cache
+from synthetic import BACKBONE, COUNTS, RES, direction, make_manifest, sha256, write_cache
 
 import ms.eval as n_table
 from ms import compute_log
 from ms.data.manifests import UNKNOWN, load_manifest
 from ms.eval import run as eval_run
-from ms.heads import load_run
+from ms.eval import supersede
+from ms.heads import HEAD_CONFIGS, load_run
 from ms.heads import train as heads_train
 
 REPO = Path(__file__).resolve().parents[2]
@@ -167,7 +168,9 @@ def move_far(root: Path, manifest: Path, chosen) -> None:
     write_cache(root / "cache", manifest, x)
 
 
-def train(root: Path, head: str = "linear", seed: int = 0, *manifests: str) -> dict:
+def train(
+    root: Path, head: str = "linear", seed: int = 0, *manifests: str, configs: Path | None = None
+) -> dict:
     """One head run on the synthetic manifests; its run.json."""
     names = manifests or ("alpha",)
     argv = [
@@ -175,6 +178,7 @@ def train(root: Path, head: str = "linear", seed: int = 0, *manifests: str) -> d
         "--train-manifest", *(str(root / "manifests" / f"{m}_v1.jsonl") for m in names),
         "--head", head, "--seed", str(seed), "--cache-root", str(root / "cache"),
         "--heads-root", str(root / "heads"), "--compute-log", str(root / "log.jsonl"),
+        *(["--config-dir", str(configs)] if configs else []),
     ]  # fmt: skip
     assert heads_train.main(argv) == 0
     found = [
@@ -182,8 +186,14 @@ def train(root: Path, head: str = "linear", seed: int = 0, *manifests: str) -> d
         for p in (root / "heads").iterdir()
         if (p / "run.json").is_file()
     ]
-    # a mix run trains its two components first, so three folders exist (spec 003 US-2.3)
-    return next(r for r in found if r["head"] == head and r["seed"] == seed)
+    # a mix run trains its two components first, so three folders exist (spec 003 US-2.3),
+    # and a second recipe gives a second run of the same (head, seed): the config decides
+    recipe = sha256((configs or Path(HEAD_CONFIGS)) / f"{head}.yaml")
+    return next(
+        r
+        for r in found
+        if r["head"] == head and r["seed"] == seed and r["head_config"]["sha256"] == recipe
+    )
 
 
 def fitted(root: Path, run_id: str) -> dict:
@@ -835,6 +845,52 @@ def test_the_five_seeds_of_a_coverage_row_make_one_aggregate(tmp_path, capsys):
         assert len(agg) == 1, f"{metric} at coverage 0.90 has {len(agg)} aggregate rows, want 1"
         assert agg[0]["ci_low"] is not None and agg[0]["ci_low"] <= agg[0]["ci_high"]
         assert agg[0]["run_id"].count("+") == 4
+
+
+def test_a_superseded_run_never_joins_a_current_aggregate(tmp_path, capsys):
+    """Spec 005 US-8.3, through spec 004's rows. A run whose recipe was replaced keeps its
+    rows, marked; when a later task adds metrics, `make eval` scores that old run again and
+    its fresh rows carry no mark. They have the identity of rows already in the table, so
+    they are not appended — and they must not reach `aggregate` either, or one of them stands
+    in for the current seed of its number and puts a superseded run id in a current
+    aggregate."""
+    _module("ms.abstain")
+    world(tmp_path)
+    old = [train(tmp_path, "linear", seed) for seed in range(5)]
+    # the W3 state: rows at coverage 1.0 only, because nothing is fitted yet
+    assert evaluate(capsys, tmp_path)[0] == 0
+    sha = old[0]["head_config"]["sha256"]
+    code = supersede.main([
+        "--config-sha256", sha, "--reason", "a new recipe, the owner's decision",
+        "--heads-root", str(tmp_path / "heads"), "--n-table", str(tmp_path / "n_table.jsonl"),
+        "--md", str(tmp_path / "n_table.md"),
+    ])  # fmt: skip
+    assert code == 0
+    assert all(r["superseded"] for r in rows(tmp_path))
+
+    # the new recipe: another head config is another run id (spec 003 FR-002)
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    recipe = yaml.safe_load((Path(HEAD_CONFIGS) / "linear.yaml").read_text(encoding="utf-8"))
+    recipe["max_epochs"] = int(recipe["max_epochs"]) + 1
+    (configs / "linear.yaml").write_text(yaml.safe_dump(recipe), encoding="utf-8")
+    new = [train(tmp_path, "linear", seed, configs=configs) for seed in range(5)]
+    assert {r["run_id"] for r in new}.isdisjoint({r["run_id"] for r in old})
+
+    # now S4.4 lands: every run is fitted, and the old ones are scored again for the metrics
+    # their rows do not have yet
+    assert fit(capsys, tmp_path)[0] == 0
+    assert evaluate(capsys, tmp_path)[0] == 0
+    replaced = {r["run_id"] for r in old}
+    current = [r for r in rows(tmp_path) if not r["superseded"]]
+    assert current, "the new runs wrote no row"
+    for r in current:
+        assert not set(r["run_id"].split("+")) & replaced, (
+            f"a current {r['metric']} row at coverage {r['coverage']} names a superseded run"
+        )
+    aggregates = [r for r in current if r["seed"] is None]
+    assert aggregates, "the five new seeds made no aggregate"
+    assert all(set(r["run_id"].split("+")) == {x["run_id"] for x in new} for r in aggregates)
 
 
 def test_a_second_make_eval_appends_nothing(tmp_path, capsys):
