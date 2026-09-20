@@ -1184,3 +1184,104 @@ after the other, while the heads and N1/N2 ran again on the CPU (80–82).
       reads "N4 the tie-breaker, N6 reported only", and spec 003 FR-006 dates the amendment.
     - H9 §7 is untouched. It never named a number of epochs, and its criteria table is what
       spec 005 US-6 copies.
+## 2026-09-20 — W4 · spec 004 (abstention and calibration), with its failing tests (ahead of schedule)
+
+The work plan's W4 "Spec S4.4 + failing tests": the contract for "I don't know" and for honest
+confidence, written before any abstention number exists (work plan §4). H8 §6.6 is copied into
+the spec verbatim, as H9 §7 was copied into spec 005 (79), because neither file is in the
+repository; §6.6 is untouched by the amendment of 85. Nothing was fitted and no row was
+written: `ms.abstain` lands with the W4 "Scores" and "N3" tasks.
+
+86. **Four scores, two of which decide.** All four are post-hoc, from what the head already
+    has (H8 §6.6, D-10).
+    - `conf` is the head's **largest logit**, for all three heads. H8 writes "max logit / max
+      prototype cosine" because the heads express confidence differently; for `proto` the
+      largest logit *is* the largest prototype cosine over τ > 0, and for `mix` it is the log
+      of the largest mixed probability (spec 003 US-2). One definition covers all three.
+    - `knn` is the distance to the k-th nearest **training** feature, both L2-normalised,
+      k = 20 from `configs/abstain.yaml`, the middle of H8's 10–50.
+    - `maha` is the relative Mahalanobis distance: the class distance minus a background
+      Gaussian's, over a shared covariance. It is the **second opinion** — fitted, recorded,
+      reported, and never consulted by `decide`.
+    - `energy` is −logsumexp of the logits, **logged only**.
+    - The decision abstains when `conf < tau_conf` **or** `knn > tau_knn`, and names
+      `low_confidence` first when both cross. Two scores decide and not three because H8's
+      decision sentence says "either score" after naming two, its `abstain_reason` vocabulary
+      has two fitted reasons, and its response carries `ood_knn_threshold` with no Mahalanobis
+      threshold beside `ood_maha`. DECISIONS 79 reads H9 §7 criterion 2 as the same two.
+    - **`mix`'s energy is identically zero**, because its logits are normalised
+      log-probabilities (spec 003 US-2.3), so logsumexp over the classes is log 1. The formula
+      stays the same for every head; no `auroc:energy` row is written for a mix run, since an
+      AUROC over float rounding would enter the table as a measured 0.5; and a constant score
+      refuses a fit only for the three **thresholded** scores.
+87. **A declared coverage is a promise per score, on the in-domain validation slice — and this
+    one deserves five minutes of the owner's time before the "Scores" task runs.**
+    - Each threshold is the quantile of its own score that keeps `c` of the slice, for
+      c ∈ {0.80, 0.90, 0.95}. The joint rule therefore keeps **less** than `c`, and the gap is
+      recorded as `coverage_achieved` instead of being hidden by moving a threshold.
+    - **The departure.** H8 §6.6 sets τ_conf "for a declared coverage" but the distance
+      threshold once, "at TPR 95 % on in-domain validation". Read literally, `tau_knn` never
+      moves. The spec follows the work plan's S4.4 row instead — "thresholds `{tau_conf,
+      tau_knn, tau_maha}` at declared coverages {0.80, 0.90, 0.95}" — so that an operating
+      point is one rule and not two; at c = 0.95 the two readings coincide. Under H8's literal
+      rule the distance score would reject 5 % of the slice at every coverage, where this one
+      rejects 20 % at 0.80 and 10 % at 0.90, so every row at 0.80 and 0.90 is a different
+      number under the two readings. With 91 below, they are written once.
+    - The N-table's `coverage` field is the **declared** coverage. What actually happened on
+      the scored set is the `abstention_rate` row beside it.
+88. **What N3's rows are.** One pair of numbers per held-out set, never pooled (79).
+    - `unknown_recall`, one row per declared coverage; `auroc:conf`, `auroc:knn`, `auroc:maha`
+      and `auroc:energy` at **coverage 1.0**, because an AUROC uses no threshold — and because
+      the verdict reads quotable aggregates at coverage 1.0 (spec 005 US-6.1), which is where
+      criterion 2 will look for them.
+    - The knowns of an AUROC row are the run's own in-domain test rows, the rows N1 already
+      scores, so the two numbers stand on one population; the row joins the knowns' and the
+      unknowns' manifests and hashes with `+`.
+    - The sources are `makerere_v1` for angular leaf spot and `swm_v1` for white mould. ALS is
+      held out in three frozen manifests; iBean's rows are left out because iBean trains in one
+      N2 direction (spec 003 US-5.1), and `makerere_crops_v1`'s because the crops carry no
+      healthy class (46).
+    - ALS is a **new dataset** for a Tanzania-trained run and a **known one** for a
+      Makerere-trained run. Both are worth having, neither may be read as the other, and the
+      row's `notes` say which it is.
+    - **Open, and for the "Verdict" task, not this one:** three training sets exist at 224, so
+      criterion 2 has three AUROC aggregates per (backbone, head, held-out set) to choose
+      between, and spec 005 US-6 does not say which. It has to before `verdict.md` is written.
+89. **An operating point rides on N1 and N2 rows.** Spec 005 US-4.2 keeps an N3 row's classes
+    to the held-out unknowns, so the per-class abstention rate of a trained class — the caution
+    of `[G73]`, and the one that would hide the rarest disease — has no other home. Spec 005
+    FR-005's vocabulary gains `unknown_recall`, `auroc:<score>`, `ece`, `selective_risk` and
+    `abstention_rate` with or without a class, and with them two qualifier kinds: a score name,
+    and "a class of the row, or none".
+90. **`n` at a coverage counts the scored rows, not the accepted ones.** `ms.eval.number_key`
+    groups the seeds of a number on every field outside spec 005's per-seed list, and `n` is
+    outside it. An `n` that followed the accepted rows would differ from seed to seed, the five
+    seeds would land in five groups, `aggregate` would emit nothing, and the selective-risk
+    curve would have no reported points at all. The accepted count goes in `notes`, which is
+    per-seed. Found by review before any code existed, which is what a failing test is for.
+91. **The abstention recipe has to be settled before the first N3 row is written.** A row's
+    identity (spec 005 FR-004) is its run, number, metric, test manifest, split and coverage.
+    None of those changes when `k`, ε or the bin count does, so the new rows would share their
+    identity with the old ones and `append_rows` would drop them: unlike a head recipe, an
+    abstention recipe cannot be superseded row by row. Widening `coverages` is the one safe
+    change. Making the fit part of a row's identity would be a change to spec 005, and it is
+    not needed if `k` is settled in the "Scores" task, as `max_epochs` was settled before the
+    heads were trained again (80).
+92. **Left out of v0.** Conformal sets (RAPS): H8 makes them optional, "implement only if W4
+    has slack", and the owner left them out of this week's queue on 2026-09-20 — the service's
+    `conformal_set` field stays null. Also out: any threshold fitted on anything but the
+    in-domain validation slice, a second opinion becoming a decision score, and the plots
+    (piece 5 draws them from the rows).
+93. **The tests: 50 red, 4 green** (`tests/test_abstain.py`), on the synthetic manifests and
+    caches of `tests/synthetic.py` plus a white-mould manifest of their kind.
+    - The leakage rule is a test, not a promise: it records every `load_manifest` call a fit
+      makes and asserts the purposes are `train` and `select` and the splits `train` and `val`
+      (SC-2).
+    - The four scores, the AUROC, the ECE and the thresholds are checked against reference
+      implementations in the test file, so an implementation cannot define its way to green.
+    - The fixture's white-mould rows are **confidently wrong**: their planted direction leans
+      on anthracnose, so the head is sure about them and only the two distance scores see
+      anything strange. That is the case abstention exists for, and it is why the orientation
+      test reads confidence on the angular-leaf-spot rows instead.
+    - The suite is 215 passed, 50 failed, 1 skipped. The 4 green tests are the ones that check
+      a malformed metric name is still refused.
