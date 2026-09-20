@@ -1566,3 +1566,96 @@ earlier. The owner spotted it.
      - **What to take from it.** A number that agrees with what you expect is the one you
        check hardest. The verdict's own text now carries how many rows it read, which is what
        made the failure legible at a glance — that field earned its place.
+
+## 2026-09-20 — W5 · spec 006, the service contract (ahead of schedule)
+
+The work plan's W5 "Spec S4.6". `specs/006-service/spec.md` copies H8 §6.2 in verbatim and
+settles what it leaves open, before the code that has to honour it exists.
+`tests/test_service.py` is 30 red and 19 green: the W2 slice (33, 37) already meets the
+request contract, the 422s, the cached-hash path and `model_version`.
+
+112. **A contract violation is an HTTP 422 whose body still reads as a response.** H8 §6.2
+     makes `invalid_input` an `abstain_reason` *and* says a contract violation returns 422;
+     both are true of one answer whose status is 422 and whose payload carries
+     `decision = "abstain"`, `abstain_reason = "invalid_input"` and the validator's `errors`.
+     One consumer branch then reads both outcomes. The slice already answers this way (37);
+     spec 006 US-2.2 makes it the contract and fixes the payload's field order.
+     - The record is checked against `interface/schema/v0/observation_frame.schema.json`
+       itself, until piece 1 ships the validator library 28 asks for. The `uri` forms stay
+       open with pieces 1 and 2, so 37's rule is promoted as it stands and `mcap://` is still
+       a 501.
+     - The 422 list the tests pin is US-2.5: a missing metadata field, the pre-rename
+       `frame.frame_id` (31), a yaw in degrees (29), `bbch` null without its reason (30), a
+       body that is not JSON, an unknown top-level key, no `request_id`, an unknown option, a
+       `coverage_target` that was not fitted, a `sha256` the bytes do not hash to (32), and a
+       `uri` outside the data root.
+113. **A batch is a list of single-frame requests**, `{"requests": [...]}`, and a broken item
+     costs only itself. One schema then serves both endpoints, each item keeps its own
+     `request_id` and `options` for piece 3's per-frame log, and "replay mode" (H8 §6.2) is
+     literally *n* replayed requests. A broken envelope is a 422; a broken item is a per-item
+     422 payload inside a 200, because a replayed mission of thousands of frames must not be
+     lost to one bad record.
+114. **The served model is a config entry, not "the newest run".** `configs/service.yaml`
+     names the run, and the service refuses to start when it resolves to none or to more than
+     one (US-10.2). The slice's rule (37) was fine with one run on disk and is wrong with 361.
+     - The verdict (108) settles the backbone, the resolution and the tokens: DINOv2 at 224 on
+       CLS. **Open for the owner**: which head and which training manifest the demo serves.
+       The N-table has the numbers to argue it either way, and the card (W5 Wed) is where the
+       choice is written down, so the question is answered at the Registry task, not here.
+     - A run with no `abstain.json` is a configuration error, not a warning. The slice
+       answered `predict` to everything and said so (37); from W5 a service that cannot
+       abstain is not the service H8 §6.11 item 1 asks for.
+115. **Features computed on request are rounded to float16, as the cache stores them**
+     (spec 002 FR-005). The replay path and the live path are then one model, bit for bit at
+     one compute dtype, instead of two models within a tolerance nobody measures per frame —
+     which is the whole reason H8 §6.9 puts the cache in front of the backbone. The precision
+     given up is the precision every number in the table already gave up. Across dtypes, a
+     cache extracted in fp16 on the GPU against a frame computed in fp32 on a CPU box, the two
+     agree within spec 002's golden tolerance (38), which is exactly the comparison that
+     tolerance was measured for.
+     - Nothing computed on request is written to a cache. A cache belongs to a manifest and is
+       keyed by one; a served frame belongs to none, and a service that grew its own cache
+       would make `cached_frames` a number nobody could reproduce.
+116. **What the response says beyond H8's example, and what it deliberately does not.** It
+     adds `frame_uid` (31: a consumer needs the frame's identity to join an answer to a frame,
+     and H8's example predates the rename) and `features`, `"cache"` or `"computed"`, which is
+     the only way to read which path answered. It does **not** add `conf` or `tau_conf` to the
+     `uncertainty` block, which stays exactly H8's five fields, and it never carries energy
+     (spec 004 US-1.4).
+     - The cost is that `low_confidence` is a reason the response does not quantify, while
+       `far_from_training` is: `ood_knn` sits beside `ood_knn_threshold`. That asymmetry is
+       H8's, and widening the block is a v0.1 question to settle with piece 1 rather than a
+       change to make alone. `abstain.json` holds `tau_conf` beside it meanwhile.
+     - `top1` is the argmax of the scores whatever `decision` says, so an abstained frame
+       still shows what the head leaned towards — which is what a human reviewing an
+       abstention wants to see. It is a label, not a decision.
+117. **The request log is one JSON line per request/response pair, 422s included.** H8 §6.2
+     calls the violations "the signal piece 3 wants", so they are logged with their `errors`
+     and their status. The fields are named once in spec 006 US-9.1 and not renamed when piece
+     3 lifts them into the predictions table.
+     - It lives under `data/` (git-ignored, DVC's), not under `results/`: it grows by one line
+       per frame of every replayed mission, and `results/` is for the small tracked artefacts.
+     - It holds the frame's hash, never its bytes and never its features. A log that cannot be
+       written is a `warning` on the response, never a 500: the answer is what the caller
+       asked for.
+118. **N6's row, and that it is measured once.** `ms.service.bench` is the only writer, it
+     calls the functions the endpoint calls rather than a copy of them, and the metric is
+     `latency_ms:<b1|b32|cached_b1|cached_b32>` — the two `b*` are H8's N6, the cost of a frame
+     the service has never seen, and the two `cached_*` are the replay path reported beside
+     them. The value is the median millisecond cost per frame and the interval is the 5th and
+     95th percentiles, one seed and no aggregate, as N4 has (54).
+     - A row has no device field (spec 005 FR-001), so two devices would share a row identity
+       and the second would be dropped. N6 is therefore measured on one machine, the one the
+       compute log's environment row describes, with the device in `notes`. A device axis is a
+       change to spec 005 and v0 does not need one.
+119. **The tests run in two worlds, because the service needs both features and bytes.** The
+     synthetic world of `synthetic.py` gets a data root of stand-in files whose bytes are their
+     `image_id`, so a file's sha256 is the row's and the cached-hash path is exercised without
+     an image. The fixture world (`ibean_30` with test_slice.py's tiny random-init backbone) is
+     the only one with real pixels, and it is where features computed on request are tested.
+     - The two abstention reasons are not guessed. A search walks away from the training
+       features and between two of them until `ms.abstain.decide` gives each reason, so the
+       test asserts that the service agrees with the fit and never with a number written in a
+       test. The fixture world's validation slice is two rows, so the only coverage it can
+       carry is 0.50 (spec 004 US-3.3); the operating point is not what those two tests are
+       about.
