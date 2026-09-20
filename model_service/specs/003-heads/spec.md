@@ -104,7 +104,7 @@ Every N1–N3 number comes from a head trained on cached features, so a head run
 - **FR-006 Recipe.**
   - AdamW with the config's `lr` (H8 range 5e-4 to 1e-3) and weight decay 1e-4. Weight decay does not apply to `log_tau`.
   - Batch 256, at most `max_epochs` epochs, early stopping after `patience` (10) epochs without a better validation score.
-  - `max_epochs` is 300. H8 says 50; the owner raised it on 2026-09-19 so that early stopping, not the cap, ends every run (Clarification 9).
+  - `max_epochs` is 300, so that early stopping, not the cap, ends every run (Clarification 9). H8 §6.5 said 50 and was amended to 300 on 2026-09-20, after the owner's decision of 2026-09-19.
   - The focal loss with γ = 2 against targets smoothed by 0.1; class-balanced sampling.
   - The epoch kept is the best by `select`.
 - **FR-007 Features.** Each token type (spec 002) is L2-normalised; `cls+meanpatch` joins the two normalised vectors (DECISIONS 34). The same `ms.heads.features` feeds training, the eval (005) and the service (006).

@@ -1161,3 +1161,26 @@ after the other, while the heads and N1/N2 ran again on the CPU (80–82).
       ends with the process. The GPU log, sampled every 30 s, has no gap. It cannot stop a
       closed lid from sleeping; on mains power this laptop's idle sleep is off anyway (45 min
       on battery).
+
+## 2026-09-20 — W3 · H8 amended in three places (the owner's request)
+
+85. **H8 now says what the team runs.** After the recipe change (80) the owner asked for the
+    plan of record to be brought up to date. `87_H8_current-plan-demo1-end-to-end-without-a-
+    robot.md` was amended in three places. Each carries its date in the text, and the `status`
+    line lists them.
+    - **§6.5, the head recipe:** 50 epochs → 300, with patience 10 named. The reason is in the
+      text: at 50 it was the cap, not early stopping, that ended the linear probe on Makerere
+      (27 optimiser steps per epoch; four seeds of five kept the last epoch on both
+      backbones). At 300 every run ends by early stopping, the longest after 208 epochs, and
+      the linear heads keep epochs 108–198. It points at the superseded rows and at 69 and
+      80–82.
+    - **§6.7, N1's split rule:** "Tanzania by region/session if available, else unblocked"
+      became "by capture date". §6.3 already allowed dates; the archives carry no region or
+      session, and `tanzania_v1` is frozen as `blocked:date` (16, 49).
+    - **§6.7, the verdict summary:** it listed N6 with N4 as a tie-breaker. H9 §7 lists
+      latency as reported only, and H9 governs (79), so the summary now reads "N4 as the
+      tie-breaker; N6 reported".
+    - The repository follows: the work plan's Heads line reads 300 epochs, its W4 verdict line
+      reads "N4 the tie-breaker, N6 reported only", and spec 003 FR-006 dates the amendment.
+    - H9 §7 is untouched. It never named a number of epochs, and its criteria table is what
+      spec 005 US-6 copies.
