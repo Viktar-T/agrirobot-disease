@@ -32,11 +32,15 @@ max_batch: 32
 device: auto
 
 # Roots. Relative paths are from the repository root; MS_HEADS_ROOT, MS_CACHE_ROOT,
-# MS_DATA_ROOT, MS_REQUEST_LOG and MS_HEAD_RUN override them.
+# MS_DATA_ROOT, MS_BACKBONE_CONFIGS, MS_HEAD_CONFIGS, MS_REQUEST_LOG, MS_DEVICE and
+# MS_HEAD_RUN override them; MS_SERVICE_CONFIG names this file.
 heads_root: data/heads
 cache_root: data/cache
 data_root: data/raw
 backbone_configs: model_service/configs/backbones
+# The head recipes. `head: linear` means the linear recipe as this directory holds it
+# now, never one the owner retired (DECISIONS 80, 121).
+head_configs: model_service/configs/heads
 
 # One JSON line per request/response pair, the 422s included (US-9). Under data/, which is
 # git-ignored: it grows by a line per frame of every replayed mission. Piece 3 moves these

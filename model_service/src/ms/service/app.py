@@ -30,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -58,6 +59,7 @@ from ms.heads import (
     features_from_tokens,
     list_runs,
     load_run,
+    resolve_path,
 )
 from ms.service.log import REQUEST_LOG, log_request, row_for
 
@@ -112,6 +114,18 @@ class ServiceError(RuntimeError):
         self.reason = reason
 
 
+def _number(cfg: dict[str, Any], path: Path, key: str, default: Any, kind: type) -> Any:
+    """A config number, or `bad_config` naming it: FR-013's vocabulary rather than whatever
+    int() or float() would have raised halfway through start-up."""
+    value = cfg.get(key)
+    if value is None:
+        return default
+    try:
+        return kind(value)
+    except (TypeError, ValueError):
+        raise ServiceError("bad_config", f"{path}: {key} = {value!r} is not a number") from None
+
+
 @dataclass
 class Settings:
     run: str | None = None
@@ -160,30 +174,43 @@ class Settings:
             request_log=where("request_log", REQUEST_LOG),
             service=path,
             device=str(cfg.get("device", "auto")),
-            max_batch=int(cfg.get("max_batch", 32)),
-            default_coverage=(
-                None if cfg.get("default_coverage") is None else float(cfg["default_coverage"])
-            ),
+            max_batch=_number(cfg, path, "max_batch", 32, int),
+            default_coverage=_number(cfg, path, "default_coverage", None, float),
             select=select,
         )
 
     @classmethod
     def from_env(cls) -> Settings:
-        """The config file, then the environment over it (FR-012). A missing file is not an
-        error here: the start-up checks say what is wrong, with their own vocabulary."""
+        """The config file, then the environment over it (FR-012).
+
+        Only the repository's own default may be absent. A file `MS_SERVICE_CONFIG` names is
+        opened whether it is there or not, so a typo is `bad_config` and not a service that
+        quietly serves something else. A relative path in the environment is resolved against
+        the repository, as one in the config file is, so the answer does not depend on the
+        directory the service was started from.
+        """
         env = os.environ
-        path = Path(env.get("MS_SERVICE_CONFIG", SERVICE_CONFIG))
-        settings = cls.from_config(path) if path.is_file() else cls(service=None)
+        named = env.get("MS_SERVICE_CONFIG")
+        path = Path(named or SERVICE_CONFIG)
+        settings = cls.from_config(path) if (named or path.is_file()) else cls(service=None)
         for key, name in (
             ("run", "MS_HEAD_RUN"),
             ("heads_root", "MS_HEADS_ROOT"),
             ("cache_root", "MS_CACHE_ROOT"),
             ("data_root", "MS_DATA_ROOT"),
+            ("backbone_configs", "MS_BACKBONE_CONFIGS"),
+            ("head_configs", "MS_HEAD_CONFIGS"),
             ("request_log", "MS_REQUEST_LOG"),
+            ("device", "MS_DEVICE"),
         ):
             value = env.get(name)
-            if value:
-                setattr(settings, key, value if key == "run" else Path(value))
+            if not value:
+                continue
+            if key in ("run", "device"):
+                setattr(settings, key, value)
+            else:
+                where = Path(value)
+                setattr(settings, key, where if where.is_absolute() else REPO_ROOT / where)
         return settings
 
 
@@ -208,6 +235,7 @@ class Served:
                 "H8 §6.11 item 1 asks for (spec 006 US-5.4)",
             ) from None
         self.coverage = self._coverage(settings)
+        self._manifests_unchanged()
 
         bb = self.run.meta["backbone"]
         key_dir = Path(settings.cache_root) / bb["backbone_id"] / str(bb["res"]) / bb["cache_key"]
@@ -223,7 +251,41 @@ class Served:
 
         self.backbone_cfg = self._backbone_cfg(settings)
         self._backbone = None
-        Path(settings.request_log).parent.mkdir(parents=True, exist_ok=True)
+        if not Path(settings.data_root).is_dir():
+            raise ServiceError(
+                "bad_config",
+                f"the data root {settings.data_root} is not a directory: every frame's uri "
+                "resolves inside it (US-4.1)",
+            )
+        try:
+            Path(settings.request_log).parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ServiceError(
+                "bad_config",
+                f"the request log {settings.request_log} cannot be written: {exc}. Every "
+                "request and response is one of its lines (US-9)",
+            ) from None
+
+    def _manifests_unchanged(self) -> None:
+        """FR-013: the manifests the run was trained on are the bytes it was trained on. A
+        frozen manifest that moved means the model on disk is no longer the model its
+        `model_version` names (spec 001 US-5)."""
+        recorded = self.run.meta["train"]["manifest_sha256"].split("+")
+        paths = self.run.meta["train"]["manifest"].split("+")
+        for path, sha in zip(paths, recorded, strict=False):
+            where = resolve_path(path)
+            if not where.is_file():
+                raise ServiceError(
+                    "frozen_manifest_modified", f"{path} is gone; {self.run.run_id} names it"
+                )
+            now = hashlib.sha256(where.read_bytes()).hexdigest()
+            if now != sha:
+                raise ServiceError(
+                    "frozen_manifest_modified",
+                    f"{path} hashes to {now[:12]}…, and {self.run.run_id} was trained on "
+                    f"{sha[:12]}…. model_version is built from that hash, so the string would "
+                    "name a model this file no longer describes",
+                )
 
     # --- what the service is configured with --------------------------------------------
 
@@ -266,26 +328,39 @@ class Served:
         head = select.get("head")
         if head and "head_config_sha256" not in select:
             recipe = Path(settings.head_configs) / f"{head}.yaml"
-            if recipe.is_file():
-                select["head_config_sha256"] = hashlib.sha256(recipe.read_bytes()).hexdigest()
+            if not recipe.is_file():
+                raise ServiceError(
+                    "bad_config",
+                    f"head {head!r} names no recipe: there is no {recipe}. A head's name is "
+                    "the recipe the repository holds now (US-10.1), so either point "
+                    "head_configs at it or give head_config_sha256 outright — dropping the "
+                    "pin would let a retired run be served",
+                )
+            select["head_config_sha256"] = hashlib.sha256(recipe.read_bytes()).hexdigest()
         return select
 
     @staticmethod
     def _matches(folder: Path, select: dict[str, Any]) -> bool:
-        meta = json.loads((folder / "run.json").read_text(encoding="utf-8"))
-        flat = {
-            **meta,
-            **{k: meta["backbone"][k] for k in ("backbone_id", "res")},
-            "head_config_sha256": meta["head_config"]["sha256"],
-        }
-        for key in RUN_KEYS:
-            if key in select and flat.get(key) != select[key]:
-                return False
-        wanted = select.get("train_manifests")
-        if wanted is not None:
-            have = [Path(p).stem for p in meta["train"]["manifest"].split("+")]
-            if have != list(wanted):
-                return False
+        """A folder that does not carry what the descriptor selects on does not match. One
+        stray or half-written run.json under the heads root is not a reason to refuse to
+        start: resolution then ends in `missing_run`, which names the descriptor."""
+        try:
+            meta = json.loads((folder / "run.json").read_text(encoding="utf-8"))
+            flat = {
+                **meta,
+                **{k: meta["backbone"][k] for k in ("backbone_id", "res")},
+                "head_config_sha256": meta["head_config"]["sha256"],
+            }
+            for key in RUN_KEYS:
+                if key in select and flat.get(key) != select[key]:
+                    return False
+            wanted = select.get("train_manifests")
+            if wanted is not None:
+                have = [Path(p).stem for p in meta["train"]["manifest"].split("+")]
+                if have != list(wanted):
+                    return False
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, AttributeError):
+            return False
         return True
 
     def _coverage(self, settings: Settings) -> float:
@@ -304,7 +379,7 @@ class Served:
 
     def _backbone_cfg(self, settings: Settings) -> dict[str, Any] | None:
         """The backbone's recipe, when this deployment has one. Without it the service is
-        replay-only: it answers cached frames and 501s the rest (US-4.2, Clarification 17)."""
+        replay-only: it answers cached frames and 501s the rest (US-4.2, Clarification 16)."""
         bb = self.run.meta["backbone"]
         try:
             cfg = backbone_config(bb["backbone_id"], Path(settings.backbone_configs))
@@ -518,8 +593,31 @@ class Prepared:
     source: str | None = None  # "cache" or "computed"
     x: np.ndarray | None = None
     image: bytes | None = None
+    prepare_ms: float = 0.0
     preprocess_ms: float = 0.0
     backbone_ms: float = 0.0
+    warnings: list[str] = field(default_factory=list)
+
+
+def _size_warning(data: bytes, frame: dict[str, Any]) -> list[str]:
+    """The edge case of US-3.5: `frame.width` and `frame.height` are the sender's claim, and
+    the decision is taken on the pixels. A mismatch is worth saying and changes nothing.
+    Only the computed path can see it — a replayed frame is never decoded."""
+    import io
+
+    from PIL import Image, UnidentifiedImageError
+
+    try:
+        with Image.open(io.BytesIO(data)) as im:  # the header only, not the pixels
+            width, height = im.size
+    except (UnidentifiedImageError, OSError, ValueError):
+        return []  # it will fail to decode in a moment, with the decoder's own reason
+    if (width, height) == (frame.get("width"), frame.get("height")):
+        return []
+    return [
+        f"the bytes at uri are {width}x{height}, and frame says "
+        f"{frame.get('width')}x{frame.get('height')}"
+    ]
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -553,6 +651,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "timing_ms": {"total": _ms(t0)},
         }
 
+    def not_served(request_id: Any, frame_uid: str, detail: str, t0: float) -> dict[str, Any]:
+        """The 501 of FR-004: a frame the contract allows and this deployment cannot answer.
+        It carries `timing_ms` like every other response (H8 §6.2) and names the model, so
+        that its log row is as readable as any other."""
+        served = state["served"]
+        return {
+            "request_id": request_id if isinstance(request_id, str) else None,
+            "frame_uid": frame_uid,
+            "model_version": served.run.meta["model_version"],
+            "detail": detail,
+            "timing_ms": {"total": _ms(t0)},
+        }
+
     def prepare(body: Any, t0: float) -> Prepared:
         """Validate, fetch and hash one item; on the cached path, its features too."""
         served = state["served"]
@@ -561,9 +672,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             request_id = body.get("request_id") if isinstance(body, dict) else None
             return Prepared(body, 422, invalid(request_id, errors, t0))
         request_id, frame = body["request_id"], body["frame"]
-        coverage = float(body.get("options", {}).get("coverage_target", served.coverage))
+        wanted = body.get("options", {}).get("coverage_target")
+        # the operating point that will actually be used, to the two decimals the fit is keyed
+        # by, so that the response and the log row name the point and not what was typed
+        coverage = served.coverage if wanted is None else float(coverage_key(wanted))
         try:
             path = resolve_uri(frame["uri"], settings.data_root)
+            data = path.read_bytes()
         except UriError as exc:
             if exc.status == 422:
                 return Prepared(
@@ -572,10 +687,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return Prepared(
                 body,
                 exc.status,
-                {"request_id": request_id, "frame_uid": frame["frame_uid"], "detail": str(exc)},
+                not_served(request_id, frame["frame_uid"], str(exc), t0),
                 frame_uid=frame["frame_uid"],
+                coverage=coverage,
             )
-        data = path.read_bytes()
+        except (OSError, ValueError) as exc:
+            # a path the filesystem refuses (a NUL byte, a name too long, a read error) is the
+            # request's fault, and a 422 that reads as a response says so and is logged
+            message = f"the bytes at uri could not be read: {exc}"
+            return Prepared(
+                body, 422, invalid(request_id, [{"path": "frame.uri", "message": message}], t0)
+            )
         digest = hashlib.sha256(data).hexdigest()
         if digest != frame["sha256"]:
             message = f"the bytes at uri hash to {digest}, not frame.sha256"
@@ -590,15 +712,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return prepared
         if not served.can_compute:
             prepared.status = 501
-            prepared.response = {
-                "request_id": request_id,
-                "frame_uid": frame["frame_uid"],
-                "detail": "frame not in the feature cache, and this deployment has no backbone "
-                f"configured for {served.run.meta['backbone']['backbone_id']}: it answers "
-                "replayed frames only (spec 006 US-4.2)",
-            }
+            prepared.response = not_served(
+                request_id,
+                frame["frame_uid"],
+                "frame not in the feature cache, and this deployment has no backbone configured "
+                f"for {served.run.meta['backbone']['backbone_id']}: it answers replayed frames "
+                "only (spec 006 US-4.2)",
+                t0,
+            )
             return prepared
         prepared.image, prepared.source = data, "computed"
+        prepared.warnings = _size_warning(data, frame)
         return prepared
 
     def answer(prepared: Prepared, t0: float) -> dict[str, Any]:
@@ -613,7 +737,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         head_ms = _ms(t1)
         tau = fit.thresholds(coverage)
 
-        warnings = []
+        warnings = list(prepared.warnings)
         if body["metadata"]["bbch"] is None:
             warnings.append("metadata.bbch is null")
         if body.get("options", {}).get("return_patch_map"):
@@ -661,25 +785,51 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "preprocess": prepared.preprocess_ms,
                 "backbone": prepared.backbone_ms,
                 "head": head_ms,
-                "total": _ms(t0),
+                # this frame's own cost: its validation, fetch and hash, plus its share of a
+                # call's joint preprocessing and backbone, plus its head. In a batch that is
+                # the frame's cost and not the call's, which is what N6 reads (US-11.2).
+                "total": round(
+                    prepared.prepare_ms + prepared.preprocess_ms + prepared.backbone_ms + head_ms,
+                    3,
+                ),
             },
             "warnings": warnings,
         }
 
     def embed_pending(items: list[Prepared]) -> None:
         """US-6.4: every frame of a call that needs the backbone goes through it in one call,
-        and each one's timing carries its share of it."""
+        and each one's timing carries its share of it.
+
+        Decoding is per frame, so a picture that will not decode is that frame's 422 and
+        costs only that frame (US-6.2). Only a failure of the backbone itself, which is the
+        call's and not any one frame's, falls on all of them.
+        """
         served = state["served"]
         pending = [p for p in items if p.image is not None and p.response is None]
         if not pending:
             return
         t1 = time.perf_counter()
+        pixels, ready = [], []
+        for p in pending:
+            try:
+                pixels.append(served.preprocess_images([p.image])[0])
+                ready.append(p)
+            except Exception as exc:  # noqa: BLE001 - this frame's bytes, this frame's 422
+                p.status = 422
+                p.response = invalid(
+                    p.body.get("request_id"),
+                    [{"path": "frame.uri", "message": f"the bytes at uri do not decode: {exc}"}],
+                    t1,
+                )
+        if not ready:
+            return
+        t2 = time.perf_counter()
+        import torch
+
         try:
-            pixels = served.preprocess_images([p.image for p in pending])
-            t2 = time.perf_counter()
-            x = served.embed(pixels)
-        except Exception as exc:  # noqa: BLE001 - a decode or a shape, both the frame's fault
-            for p in pending:
+            x = served.embed(torch.stack(pixels))
+        except Exception as exc:  # noqa: BLE001 - the backbone, which is the call's failure
+            for p in ready:
                 p.status = 422
                 p.response = invalid(
                     p.body.get("request_id"),
@@ -688,10 +838,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
             return
         # a call embeds its frames together (US-6.4), so each one carries its share of it
-        n = len(pending)
+        n = len(ready)
         preprocess_share = round((t2 - t1) * 1000 / n, 3)
         backbone_share = round((time.perf_counter() - t2) * 1000 / n, 3)
-        for k, p in enumerate(pending):
+        for k, p in enumerate(ready):
             p.x = x[k : k + 1]
             p.preprocess_ms = preprocess_share
             p.backbone_ms = backbone_share
@@ -712,12 +862,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
             )
         except OSError as exc:
+            # the answer is what the caller asked for, so this is a warning and never a 500 —
+            # but it is also the pair piece 3 will never see, so it goes to the service's log
+            message = f"the request log {settings.request_log} could not be written: {exc}"
+            print(message, file=sys.stderr)
             return [f"the request log could not be written: {exc}"]
         return []
 
     def handle(body: Any) -> tuple[int, dict[str, Any]]:
         t0 = time.perf_counter()
         prepared = prepare(body, t0)
+        prepared.prepare_ms = _ms(t0)
         embed_pending([prepared])
         status, response = _finish(prepared, t0)
         return status, response
@@ -776,13 +931,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             record(Prepared(None), 422, response)
             return JSONResponse(status_code=422, content=response)
 
-        starts = [time.perf_counter() for _ in body["requests"]]
-        items = [prepare(item, starts[k]) for k, item in enumerate(body["requests"])]
+        items, starts = [], []
+        for item in body["requests"]:
+            start = time.perf_counter()
+            prepared = prepare(item, start)
+            prepared.prepare_ms = _ms(start)  # this frame's own validation, fetch and hash
+            items.append(prepared)
+            starts.append(start)
         embed_pending(items)
         answers, n_invalid = [], 0
         for k, prepared in enumerate(items):
             status, response = _finish(prepared, starts[k])
-            n_invalid += status != 200
+            # US-6.2: an item is invalid when it broke the contract, which is what piece 3
+            # counts. A 501 is a frame this deployment cannot answer, not a bad request.
+            n_invalid += status == 422
             answers.append(response)
         return JSONResponse(content={"responses": answers, "n_invalid": n_invalid})
 

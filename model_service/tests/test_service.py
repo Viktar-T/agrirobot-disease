@@ -71,17 +71,28 @@ LOG_KEYS = [
 ]  # fmt: skip
 #: the two fitted reasons (spec 004 US-4.2); invalid_input is this spec's own (US-5.6)
 REASONS = ("low_confidence", "far_from_training")
+#: the hand-built cache rows the tests need: one per reason, and one the coverage decides
+ODD_ROWS = (*REASONS, "borderline")
 #: N6's qualifiers (FR-010): the two H8 asks for, and the replay path reported beside them
 LATENCY_QUALIFIERS = ("b1", "b32", "cached_b1", "cached_b32")
 DEFAULT_COVERAGE = 0.90
 #: settings_for's "the world's own service.yaml", so that None can mean "no config at all"
 _CONFIG = Path("<the world's service.yaml>")
 #: the contract violations of US-2.5, by the name of what each one breaks
-VIOLATIONS = [
-    "missing_metadata_field", "pre_rename_frame_id", "yaw_in_degrees", "bbch_null_without_reason",
-    "unknown_top_level_key", "no_request_id", "unknown_option", "unfitted_coverage",
-    "coverage_one_is_not_an_operating_point", "wrong_sha256", "uri_outside_the_data_root",
-]  # fmt: skip
+VIOLATION_PATHS = {
+    "missing_metadata_field": "metadata",
+    "pre_rename_frame_id": "frame",
+    "yaw_in_degrees": "metadata.pose.yaw",
+    "bbch_null_without_reason": "metadata",
+    "unknown_top_level_key": "extra",
+    "no_request_id": "request_id",
+    "unknown_option": "options.patch_map",
+    "unfitted_coverage": "options.coverage_target",
+    "coverage_one_is_not_an_operating_point": "options.coverage_target",
+    "wrong_sha256": "frame.sha256",
+    "uri_outside_the_data_root": "frame.uri",
+}
+VIOLATIONS = list(VIOLATION_PATHS)
 
 
 # --- the module under test -----------------------------------------------------------------------
@@ -135,6 +146,7 @@ def service_config(root: Path, run_id: str, **changes) -> Path:
         "request_log": str(root / "predictions" / "requests.jsonl"),
     }
     cfg.update(changes)
+    cfg = {k: v for k, v in cfg.items() if v is not None}
     path = root / f"service{len(list(root.glob('service*.yaml')))}.yaml"
     path.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
     return path
@@ -204,21 +216,25 @@ def forcing_rows(root: Path, run_meta: dict) -> dict[str, dict]:
         decision, reason = decide(fit, row, DEFAULT_COVERAGE)
         if decision == "abstain":
             found.setdefault(reason, x)
-        if len(found) == len(REASONS):
+        # and one the coverage itself decides: kept at 0.95, refused at 0.80. Without it the
+        # service could ignore options.coverage_target and every assertion would still hold
+        if decide(fit, row, 0.95)[0] != decide(fit, row, 0.80)[0]:
+            found.setdefault("borderline", x)
+        if len(found) == len(ODD_ROWS):
             break
-    missing = [r for r in REASONS if r not in found]
+    missing = [r for r in ODD_ROWS if r not in found]
     assert not missing, f"the search forced no {missing}: the synthetic world cannot test them"
 
-    rows = [odd_row(i) for i, _ in enumerate(REASONS)]
+    rows = [odd_row(i) for i, _ in enumerate(ODD_ROWS)]
     path = root / "manifests" / "odd_v1.jsonl"
     path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8", newline="\n")
     path.with_name("odd_v1.meta.json").write_text(
         json.dumps({"manifest": "odd", "version": 1, "role": "holdout_unknown"}), encoding="utf-8"
     )
-    write_cache(root / "cache", path, np.stack([found[r] for r in REASONS]), backbone=BACKBONE)
+    write_cache(root / "cache", path, np.stack([found[r] for r in ODD_ROWS]), backbone=BACKBONE)
     for row in rows:
         (root / "raw" / f"{row['image_id']}.img").write_bytes(row["image_id"].encode())
-    return dict(zip(REASONS, rows, strict=True))
+    return dict(zip(ODD_ROWS, rows, strict=True))
 
 
 def train_synthetic(root: Path, manifest: Path, seed: int = 0) -> dict:
@@ -395,6 +411,8 @@ def test_every_contract_violation_is_422_with_the_validators_reason(client, worl
     assert (out["decision"], out["abstain_reason"]) == ("abstain", "invalid_input")
     assert out["errors"] and all(set(e) == {"path", "message"} for e in out["errors"])
     assert out["errors"] == sorted(out["errors"], key=lambda e: e["path"])
+    # the check that refused it, so that removing one fails a test rather than a status code
+    assert any(e["path"] == VIOLATION_PATHS[case] for e in out["errors"]), out["errors"]
 
 
 def test_a_body_that_is_not_json_is_422(client):
@@ -409,6 +427,30 @@ def test_the_422_names_the_fitted_coverages(client, world):
     assert all(coverage_key(c) in message for c in COVERAGES)
 
 
+def test_a_null_coverage_target_is_the_default_and_not_a_crash(client, world):
+    """`options.coverage_target: null` is "no preference", the shape piece 1's records use
+    for an absent value (DECISIONS 30) — never a 500."""
+    body = a_request(world)
+    body["options"]["coverage_target"] = None
+    r = client.post("/v1/predict", json=body)
+    assert r.status_code == 200, r.text
+    tau = world["fit"]["thresholds"][coverage_key(DEFAULT_COVERAGE)]
+    assert r.json()["uncertainty"]["ood_knn_threshold"] == pytest.approx(tau["tau_knn"])
+    assert log_rows(world)[-1]["coverage"] == DEFAULT_COVERAGE
+
+
+def test_a_uri_the_filesystem_refuses_is_422_and_is_logged(client, world):
+    """A NUL byte, a name too long, an unreadable file: the request's fault, so a 422 that
+    reads as a response and one line of the log — never a 500 (US-2.5, US-9.1)."""
+    before = len(log_rows(world))
+    body = a_request(world)
+    body["frame"]["uri"] = "a" + chr(0) + "b.img"
+    r = client.post("/v1/predict", json=body)
+    assert r.status_code == 422, r.text
+    assert r.json()["errors"][0]["path"] == "frame.uri"
+    assert len(log_rows(world)) == before + 1
+
+
 def test_a_fitted_coverage_is_matched_to_two_decimals(client, world):
     body = a_request(world)
     body["options"]["coverage_target"] = 0.9  # the same operating point as 0.90
@@ -419,7 +461,12 @@ def test_an_mcap_uri_is_still_501(client, world):
     body = a_request(world)
     body["frame"]["uri"] = "mcap://bag/camera/1"  # open with piece 2 (DECISIONS 28, 37)
     r = client.post("/v1/predict", json=body)
-    assert r.status_code == 501 and set(r.json()) == {"request_id", "frame_uid", "detail"}
+    assert r.status_code == 501
+    out = r.json()
+    # a 501 is a response too: it names the model and carries timing_ms (FR-004, FR-011)
+    assert set(out) == {"request_id", "frame_uid", "model_version", "detail", "timing_ms"}
+    assert out["model_version"] == world["run"]["model_version"]
+    assert out["timing_ms"]["total"] >= 0
 
 
 # --- US-3: the response --------------------------------------------------------------------------
@@ -436,13 +483,20 @@ def test_the_response_carries_h8_6_2s_fields(client, world):
     assert out["decision"] in ("predict", "abstain")
     assert (out["conformal_set"], out["localisation"]) == (None, None)
     assert out["model_version"] == world["run"]["model_version"]
+    run = world["run"]
+    # the provenance an answer carries is the run's, not a plausible-looking copy of it
     assert out["backbone"]["input_res"] == RES and out["backbone"]["tokens"] == "cls"
+    assert out["backbone"]["weights_sha256"] == run["backbone"]["weights_sha256"]
+    assert out["backbone"]["cache_key"] == run["backbone"]["cache_key"]
+    assert out["backbone"]["backbone_id"] == run["backbone"]["backbone_id"]
+    assert out["head"]["id"] == run["head"] and out["head"]["run_id"] == run["run_id"]
+    assert out["head"]["train_manifest_sha256"] == run["train"]["manifest_sha256"]
     assert out["head"]["calibration"] == {"temperature": world["fit"]["temperature"]["T"]}
 
 
-def cached_features(world: dict, row: dict) -> np.ndarray:
+def cached_features(world: dict, row: dict, manifest: Path | None = None) -> np.ndarray:
     run = load_run(world["root"] / "heads" / world["run"]["run_id"])
-    m = load_manifest(world["manifest"], None, "extract")
+    m = load_manifest(manifest or world["manifest"], None, "extract")
     npz = find_cache(
         world["root"] / "cache", BACKBONE, RES, m.name, m.sha256,
         key=run.meta["backbone"]["cache_key"],
@@ -516,26 +570,43 @@ def test_abstain_is_reachable_with_both_reasons(client, world, reason):
 
 
 def test_the_uncertainty_block_carries_the_distance_and_its_threshold(client, world):
-    out = client.post("/v1/predict", json=a_request(world)).json()
+    """US-5.3: each of the five fields is the quantity it is named after — the two distances
+    are not interchangeable, and the response is where a reader reads the crossing that
+    `abstain_reason` does not name."""
+    row = scored_rows(world)[0]
+    folder = world["root"] / "heads" / world["run"]["run_id"]
+    run, fit = load_run(folder), load_fit(folder, cache_root=world["root"] / "cache")
+    x = cached_features(world, row)
+    expected = {k: float(v[0]) for k, v in scores(fit, run, x).items()}
+    out = client.post("/v1/predict", json=a_request(world, row)).json()
     tau = world["fit"]["thresholds"][coverage_key(DEFAULT_COVERAGE)]
     assert out["uncertainty"]["ood_knn_threshold"] == pytest.approx(tau["tau_knn"])
-    assert isinstance(out["uncertainty"]["ood_knn"], float)
-    assert isinstance(out["uncertainty"]["ood_maha"], float)  # a second opinion, never decisive
+    assert out["uncertainty"]["ood_knn"] == pytest.approx(expected["knn"], abs=1e-5)
+    assert out["uncertainty"]["ood_maha"] == pytest.approx(expected["maha"], abs=1e-4)
+    assert expected["knn"] != pytest.approx(expected["maha"], abs=1e-4), "the two must differ"
 
 
 def test_only_the_confidence_gate_moves_with_the_coverage(client, world):
     """US-2.4 with spec 004 US-3.1: tau_knn is the same value at every declared coverage, so
     the threshold in the response does not move; the confidence gate does."""
-    seen = set()
+    folder = world["root"] / "heads" / world["run"]["run_id"]
+    run, fit = load_run(folder), load_fit(folder, cache_root=world["root"] / "cache")
+    row = world["odd"]["borderline"]
+    x = cached_features(world, row, manifest=world["root"] / "manifests" / "odd_v1.jsonl")
+    scored = {k: float(v[0]) for k, v in scores(fit, run, x).items()}
+    seen = {}
     for coverage in COVERAGES:
-        body = a_request(world, world["odd"]["low_confidence"])
+        body = a_request(world, row)
         body["options"]["coverage_target"] = coverage
         out = client.post("/v1/predict", json=body).json()
-        assert out["uncertainty"]["ood_knn_threshold"] == pytest.approx(
-            world["fit"]["thresholds"][coverage_key(coverage)]["tau_knn"]
-        )
-        seen.add((out["decision"], out["abstain_reason"]))
-    assert seen  # the operating point is read per request, not pinned at start-up
+        tau = world["fit"]["thresholds"][coverage_key(coverage)]
+        assert out["uncertainty"]["ood_knn_threshold"] == pytest.approx(tau["tau_knn"])
+        # the answer is the fit's at THAT coverage, which is what makes the option do work
+        assert (out["decision"], out["abstain_reason"]) == decide(fit, scored, coverage)
+        assert log_rows(world)[-1]["coverage"] == coverage
+        seen[coverage] = (out["decision"], out["abstain_reason"])
+    # and the coverages are not all the same answer, or the option could be ignored
+    assert len(set(seen.values())) > 1, seen
 
 
 # --- US-6: the batch -----------------------------------------------------------------------------
@@ -579,6 +650,32 @@ def test_a_broken_envelope_is_422(client, envelope):
 def test_a_batch_longer_than_max_batch_is_422(client, world):
     r = client.post("/v1/predict_batch", json={"requests": [a_request(world)] * 33})
     assert r.status_code == 422 and "max_batch" in json.dumps(r.json())
+
+
+def test_n_invalid_counts_the_items_that_broke_the_contract(client, world):
+    """US-6.2: a 501 is a frame this deployment cannot answer, not a bad request, so it is
+    not one of the invalid ones piece 3 counts."""
+    unserved = a_request(world)
+    unserved["frame"]["uri"] = "mcap://bag/camera/1"
+    bodies = [broken(world, "yaw_in_degrees"), unserved, a_request(world)]
+    out = client.post("/v1/predict_batch", json={"requests": bodies}).json()
+    assert out["n_invalid"] == 1
+    assert out["responses"][0]["abstain_reason"] == "invalid_input"
+    assert "detail" in out["responses"][1] and "model_version" in out["responses"][1]
+    assert out["responses"][2]["decision"] in ("predict", "abstain")
+
+
+def test_a_frames_timing_is_its_own_cost_and_not_the_calls(client, world):
+    """US-6.4: a batch shares one backbone call, and each frame carries its share of it —
+    so a later frame's `total` is not the whole call's wall clock."""
+    bodies = [a_request(world, r) for r in scored_rows(world)[:4]]
+    out = client.post("/v1/predict_batch", json={"requests": bodies}).json()
+    totals = [r["timing_ms"]["total"] for r in out["responses"]]
+    assert all(t > 0 for t in totals)
+    assert max(totals) < 10 * (min(totals) + 1.0), totals  # not a running sum
+    for r in out["responses"]:
+        parts = r["timing_ms"]
+        assert parts["total"] >= parts["preprocess"] + parts["backbone"] + parts["head"]
 
 
 # --- US-7 and US-8: the card summary, and model_version ------------------------------------------
@@ -703,6 +800,45 @@ def test_the_service_refuses_a_run_it_cannot_find(world):
         TestClient(create_app(Settings.from_config(config))),
     ):
         pass
+
+
+@pytest.mark.parametrize(
+    ("changes", "reason"),
+    [
+        ({"data_root": "no-such-root"}, "bad_config"),
+        ({"max_batch": "many"}, "bad_config"),
+        ({"default_coverage": 0.85}, "bad_value"),
+        (
+            {"head_configs": "no-such-recipes", "head": "linear", "by_descriptor": True},
+            "bad_config",
+        ),
+    ],
+)
+def test_the_start_up_checks_refuse_with_their_own_reason(world, changes, reason):
+    """FR-013: a configuration the service will not start on says which of its reasons it
+    is, rather than raising whatever the first line to touch it would have raised."""
+    run_id = None if changes.pop("by_descriptor", False) else world["run"]["run_id"]
+    config = service_config(world["root"], run_id, **changes)
+    with pytest.raises(Exception, match=reason):
+        settings = Settings.from_config(config)  # bad_config can be raised here …
+        with TestClient(create_app(settings)):  # … or at start-up
+            pass
+
+
+def test_the_service_refuses_a_run_whose_frozen_manifest_moved(world, tmp_path):
+    """FR-013: model_version is built from the manifest's hash, so a manifest that moved
+    means the string names a model this file no longer describes (spec 001 US-5)."""
+    manifest = world["manifest"]
+    before = manifest.read_bytes()
+    try:
+        manifest.write_bytes(before + b'{"image_id": "late"}\n')
+        with (
+            pytest.raises(Exception, match="frozen_manifest_modified"),
+            TestClient(create_app(settings_for(world))),
+        ):
+            pass
+    finally:
+        manifest.write_bytes(before)
 
 
 # --- US-11: N6 -----------------------------------------------------------------------------------
@@ -940,6 +1076,20 @@ def test_an_uncached_frame_is_computed_on_request(fixture_client, fixture_world)
     assert out["features"] == "computed"
     assert out["timing_ms"]["backbone"] > 0 and out["timing_ms"]["preprocess"] > 0
     assert set(out["scores"]) == set(fixture_world["run"]["classes"])
+
+
+def test_a_frame_that_is_not_the_size_it_claims_is_a_warning(fixture_client, fixture_world):
+    """US-3.5's edge case: width and height are the sender's claim, and the decision is taken
+    on the pixels. A mismatch is said out loud and changes nothing."""
+    body = fixture_request(fixture_world, unseen=True)
+    honest = fixture_client.post("/v1/predict", json=body).json()
+    assert not any("frame says" in w for w in honest["warnings"])
+
+    body = fixture_request(fixture_world, unseen=True)
+    body["frame"]["width"], body["frame"]["height"] = 4096, 3000
+    out = fixture_client.post("/v1/predict", json=body).json()
+    assert any("frame says 4096x3000" in w for w in out["warnings"]), out["warnings"]
+    assert out["decision"] == honest["decision"] and out["scores"] == honest["scores"]
 
 
 def test_the_cached_and_the_computed_path_agree(fixture_client, fixture_world):

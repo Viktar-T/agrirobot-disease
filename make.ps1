@@ -27,7 +27,7 @@ $py = @('uv', 'run', 'python')
 
 switch ($Target) {
     'help' {
-        Write-Host 'targets: env, compute-log, env-check, hub-check, test, lint, fmt, download, manifests, cache, heads, abstain, eval, probe, serve, clean'
+        Write-Host 'targets: env, compute-log, env-check, hub-check, test, lint, fmt, download, manifests, cache, heads, abstain, eval, card, register, probe, serve, clean'
     }
     'env' {
         Invoke-Step @('uv', 'sync')
@@ -57,6 +57,11 @@ switch ($Target) {
     'heads'     { Invoke-Step ($py + @('-m', 'ms.heads.train', '--backbone', $BB, '--res', $RES) + $ArgsRest) }
     'abstain'   { Invoke-Step ($py + @('-m', 'ms.abstain.fit') + $ArgsRest) }
     'eval'      { Invoke-Step ($py + @('-m', 'ms.eval.run') + $ArgsRest) }
+    'card'      { Invoke-Step ($py + @('-m', 'ms.registry', 'card') + $ArgsRest) }
+    'register'  {
+        Invoke-Step ($py + @('-m', 'ms.registry', 'log') + $ArgsRest)
+        Invoke-Step ($py + @('-m', 'ms.registry', 'register') + $ArgsRest)
+    }
     'probe'     { Invoke-Step ($py + @('-m', 'ms.eval.probe') + $ArgsRest) }
     'serve'     { Invoke-Step @('uv', 'run', 'uvicorn', 'ms.service.app:app', '--host', '127.0.0.1', '--port', '8000') }
     'clean' {

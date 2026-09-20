@@ -30,6 +30,10 @@ KEYS = {
     "batch_size",
     "token_types",
 }
+#: only a gated backbone carries it: H8 §6.8 asks the model card to state the date its terms
+#: were accepted, and a card renders what an artefact holds (DECISIONS 128)
+GATED_KEYS = {"terms_accepted"}
+DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def _config(backbone_id):
@@ -43,7 +47,7 @@ def _config(backbone_id):
 @pytest.mark.parametrize("backbone_id", sorted(check.BACKBONES))
 def test_config_parses_and_pins_a_commit(backbone_id):
     cfg = _config(backbone_id)
-    assert set(cfg) == KEYS
+    assert set(cfg) - GATED_KEYS == KEYS
     assert cfg["backbone_id"] == backbone_id
     assert cfg["hf_id"] == check.BACKBONES[backbone_id]
     assert SHA.match(cfg["revision"]), "revision must be a commit sha, never a branch"
@@ -72,6 +76,12 @@ def test_only_dinov3_is_gated_and_research_only():
     )
     assert (v3["gated"], v3["research_only_until_c5"]) == (True, True)
     assert v3["licence"].startswith("DINOv3 License")
+    # a gated backbone records when its terms were accepted, because the card states it
+    assert "terms_accepted" not in v2
+    accepted = v3["terms_accepted"]
+    assert set(accepted) == {"date", "account", "scope"}
+    assert DATE.fullmatch(str(accepted["date"])), accepted["date"]
+    assert accepted["account"] and "research" in accepted["scope"]
     assert (v2["patch_size"], v2["resolutions"]) == (14, [224, 518])
     assert (v3["patch_size"], v3["resolutions"]) == (16, [224, 512])
 

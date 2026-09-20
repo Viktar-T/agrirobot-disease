@@ -10,6 +10,12 @@ revision: ea8dc2863c51be0a264bab82070e3e8836b02d51
 licence: "DINOv3 License (Meta, 2025-08-14), gated"
 gated: true
 research_only_until_c5: true
+# H8 6.8 asks the model card to state when the gated terms were accepted, and on whose
+# account (DECISIONS 13). The card reads it from here, not from prose.
+terms_accepted:
+  date: 2026-09-18
+  account: Viktar-Taustyka
+  scope: "research evaluation only, on the ML role's own Hugging Face account"
 patch_size: 16
 embed_dim: 1024
 resolutions: [224, 512]

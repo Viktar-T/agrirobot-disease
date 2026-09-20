@@ -15,7 +15,7 @@ RES ?= 224
 ARGS ?=
 
 .DEFAULT_GOAL := help
-.PHONY: help env env-check hub-check compute-log test lint fmt download manifests cache heads abstain eval probe serve clean
+.PHONY: help env env-check hub-check compute-log test lint fmt download manifests cache heads abstain eval card register probe serve clean
 
 help: ## list the targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-13s\033[0m %s\n", $$1, $$2}'
@@ -68,6 +68,13 @@ abstain: ## (W4, S4.4) fit each head run's thresholds and temperature -> data/he
 
 eval: ## (W3-W4, S4.5) results/n_table.jsonl -> n_table.md + verdict.md
 	$(PY) -m ms.eval.run $(ARGS)
+
+card: ## (W5, S4.6) render cards/<model_version>.md from the run, its fit and the N-table
+	$(PY) -m ms.registry card $(ARGS)
+
+register: ## (W5, H8 6.8) log the head runs to MLflow, and register one -- only with a card
+	$(PY) -m ms.registry log $(ARGS)
+	$(PY) -m ms.registry register $(ARGS)
 
 probe: ## (W2, N4) site-prediction probe on cached features
 	$(PY) -m ms.eval.probe $(ARGS)

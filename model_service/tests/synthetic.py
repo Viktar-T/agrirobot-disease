@@ -2,7 +2,8 @@
 test_n_table.py). No image, backbone or GPU is needed, as in test_probe.py.
 
 A manifest here has the row fields that the heads and the eval read (spec 001 FR-003:
-image_id, dataset, sha256, class_km2, split, split_rule, group_keys), a sidecar with its
+image_id, dataset, sha256, class_km2, licence, attribution, split, split_rule,
+group_keys), a sidecar with its
 role, and, when frozen, a line in the FROZEN.jsonl beside it. Its cache (spec 002 FR-005,
 FR-006) holds features with a planted class signal: noise plus a fixed direction per class,
 the same in every manifest, so a head can learn the class and a held-out class has its own.
@@ -42,6 +43,8 @@ def image_row(dataset: str, i: int, klass: str, split: str) -> dict:
         "dataset": dataset,
         "sha256": hashlib.sha256(image_id.encode()).hexdigest(),
         "class_km2": klass,
+        "licence": "CC-BY-4.0",
+        "attribution": f"Synthetic {dataset} rows for the CPU tests. No real image.",
         "split": split,
         "split_rule": "holdout_unknown" if split == "holdout_unknown" else "blocked:date",
         "group_keys": {"date": None, "phash_group": image_id},

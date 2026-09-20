@@ -38,7 +38,7 @@ optional `HF_HOME` so the checkpoints do not land on the system drive.
 | `configs/` | `backbones/*.yaml`, `datasets/*.yaml` (downloads), `manifests/*.yaml` (manifest recipes, spec 001), `class_map_v1.yaml`, `heads/*.yaml`, `eval.yaml`, `abstain.yaml`, `service.yaml` (the model the service answers with) | W1–W5 |
 | `tests/` | pytest; `fixtures/ibean_30/` runs on CPU | W1 onwards |
 | `results/` | `compute_log.jsonl` (N7), `n_table.jsonl` + `n_table.md` (the numbers), `verdict.md` — small, tracked in git | W1 onwards |
-| `cards/` | model cards, one per registered model | W5 |
+| `cards/` | `TEMPLATE.md` and one rendered card per registered model | W5 |
 
 ## The pipeline (the W2 vertical slice)
 
@@ -132,6 +132,29 @@ run, to several, or to a run without its `abstain.json`.
 Every request and response, the 422s included, is one JSON line of
 `data/predictions/requests.jsonl` (git-ignored; `MS_REQUEST_LOG`). Piece 3 moves those rows
 into its predictions table when it has one.
+
+## The registry and the model card (H8 §6.8)
+
+Every head run is one MLflow run, in one experiment per backbone
+(`piece4-heads-<backbone_id>`), logging the manifest hashes, the preprocessing string, the
+seed, N1–N3 and the calibration temperature. A model is **registered only when it has a
+card**, and the card has to be the one the artefacts render now — so a model whose numbers
+moved cannot be registered until its card is written again.
+
+```bash
+make card ARGS="--run <run_id>"       # cards/<model_version>.md, rendered from the artefacts
+make register ARGS="--run <run_id>"   # log every run, then register that one
+uv run mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db
+```
+
+The card is `cards/<model_version>.md`, rendered from `cards/TEMPLATE.md`: the prose is the
+template's and the same for every v0 model, and every number, hash, licence and attribution
+line comes from the run, its `abstain.json`, the frozen manifests and `results/n_table.jsonl`.
+Nobody edits a rendered card by hand — `register` refuses one that differs from what the
+artefacts render. A number the table does not hold is an honest blank, never a zero.
+
+Registering lands one version of `piece4-bean-disease-v0`, tagged with the card's path and
+its sha256: H8 D-7's model set, which a winning challenger joins and never evicts.
 
 ## The site probe (N4)
 

@@ -1673,9 +1673,10 @@ which comes with the W5 "N6" task.
      training set were still open.
      - **Why this one.** A demo frame is a frame the head has never seen, so N2 is the number
        that predicts how it behaves, and this run carries the best N2 the champion has:
-       macro-F1 0.889 into Tanzania, against 0.861 for mix and 0.733 for proto. Its N1 on its
-       own set is 0.991, within 0.003 of the best. It is quotable, although iBean is
-       test-only, because it trains beside Makerere (74).
+       macro-F1 0.889 into Tanzania, against 0.861 for mix and 0.733 for proto. It is
+       quotable, although iBean is test-only, because it trains beside Makerere (74). It has
+       no N1 of its own (129); the 0.991 that the same recipe reaches on Makerere alone
+       belongs to a **different run** and is not this model's number.
      - `model_version` is `msv0.1+dinov2_l14_reg@224.linear.man-0670c6-423a16`: two training
        manifests, so their first six hex digits join with a dash (spec 003).
      - What would reverse it: a new verdict, or a later N2 that moves the order of the three
@@ -1722,3 +1723,140 @@ which comes with the W5 "N6" task.
      the tests now build their settings from their own `service.yaml`, and a module-scoped
      fixture fails the suite if the repository's log changes while it runs — the guard 111
      earned, applied to the second artefact a default path could reach.
+
+## 2026-09-20 — W5 · the registry and the card (ahead of schedule)
+
+The work plan's W5 "Registry + card". `ms.registry` renders `cards/<model_version>.md` from
+the artefacts, logs every head run to MLflow, and registers a model only with a card. The
+model the verdict names — the champion at 224 on CLS, with the owner's head and training set
+(120) — is registered as version 1.
+
+126. **The card is rendered, not written.** `cards/TEMPLATE.md` holds the prose that is the
+     same for every v0 model — intended use, what it is not validated for, the failure modes
+     that do not come from a number — and every hash, licence line, attribution and number is
+     filled in from the run, its `abstain.json`, the frozen manifests and `n_table.jsonl`.
+     - **A card that is not what the artefacts render now blocks the registration.** H8 §6.8
+       says "registered only when the run has a card"; a card that code writes would make that
+       a formality, so the gate is *current*, not *present*. A number that moves, or a hand
+       edit, and `register` exits 2 with `missing_card` until the card is written again. The
+       comparison ignores the one line that changes on every render, the status and the
+       timestamp, so a re-render of unchanged artefacts is a no-op.
+     - The same habit as `verdict.md` (109) and for the same reason: an artefact that quotes
+       numbers must not be able to quote stale ones.
+127. **One MLflow experiment per backbone, and one registered model.** `piece4-heads-dinov2_l14_reg`
+     (181 runs) and `piece4-heads-dinov3_l16` (180), each run tagged with its `head_run_id` and
+     `model_version` and carrying the manifest hashes, the preprocessing string, the seed, the
+     temperature, the thresholds and every N-table aggregate it stands behind (H8 §6.8).
+     Re-running logs nothing.
+     - The registered model is **one name**, `piece4-bean-disease-v0`, with a version per model
+       that joins it. That is D-7's "model set behind the service interface": a winning
+       challenger joins, it never evicts. A name per backbone would have made the set two sets.
+     - A version carries the path of its card and **two** hashes of it: the file's, and the
+       file's without the two lines that change on every render. The card is written before
+       the version is created, so both are the card as it stands. Registering again when the
+       second has moved — a number landed, the card was written again — says so and points at
+       `--force`, instead of leaving the registry pointing at a card that has moved on. A
+       cosmetic re-render is not drift, which is what the second hash is for.
+     - A non-quotable run is refused outright: a run whose numbers are never reported is not a
+       model to register.
+128. **Registered: `msv0.1+dinov2_l14_reg@224.linear.man-0670c6-423a16`, version 1.** The
+     model the service serves (120), with its card at
+     `cards/msv0.1+dinov2_l14_reg@224.linear.man-0670c6-423a16.md`.
+     - Two things the card says that the plan assumed otherwise. **Makerere is CC0-1.0**, not
+       CC BY 4.0 as H8 §6.1's hygiene note lists it — the licence comes from the dataset's own
+       `DOWNLOAD.json` through the manifest rows, and the card prints what the data says. The
+       attribution line is still given, because CC0 asks for none and the authors deserve one.
+       **iBean is MIT**, as the plan says.
+     - The backbone's licence is read from `configs/backbones/<id>.yaml`, and the gated one now
+       records when its terms were accepted: `terms_accepted` (date 2026-09-18, the account,
+       and "research evaluation only") joins `dinov3_l16.yaml`, because H8 §6.8 asks the card
+       to state it and prose in a decisions file is not something a card can render. It is not
+       part of the cache key, so no cache changed.
+129. **The served model has no N1, and the card says so.** `ms.eval.run` writes N1 for a run
+     trained on **one** manifest (spec 005 US-3.1), and this one trains on Makerere + iBean.
+     Its evidence is N2 (macro-F1 0.889 into Tanzania) and N3; its in-domain number does not
+     exist in the table.
+     - The card prints "Not measured for this model: N1, N6" rather than a zero or a borrowed
+       number. N6 lands on Thursday; N1 is a real gap, and the nearest thing to it is the same
+       recipe on Makerere alone (0.991), which is a *different model* and is not quoted on this
+       card.
+     - **For the owner.** Giving a two-manifest run an N1 means deciding what "its own test
+       split" is when one of the two manifests is test-only, which is spec 005's to settle and
+       not the card's to paper over. The pair check (US-4.1) is satisfied at the level of
+       (backbone, resolution, tokens, head), so nothing else in the table is blocked by it.
+130. **The card names the classes the model actually has, not the task's.** The first render
+     said "one of *healthy*, *rust* or *anthracnose* out", because that is the label space of
+     H8 §6.3 — and the served model has **two** classes, healthy and rust, since neither
+     Makerere nor iBean holds an anthracnose row. A card that overstates what a model can
+     return is worse than no card.
+     - So the prose is rendered too: `{{classes_sentence}}` and `{{n_classes}}` come from the
+       run, and the card now says "decides between two classes", names the task's three, and
+       says what happens to a photograph of the class it does not have — it lands on whichever
+       class it looks most like, or on `abstain`.
+     - **For the owner, as a consequence of 120.** The demo model cannot say `anthracnose`.
+       The three-class alternative is a Tanzania-trained head, and its cross-dataset numbers
+       are 0.36–0.53 against this one's 0.889: the choice buys the best behaviour on unseen
+       sites at the cost of a class. Worth stating in the demo, and worth revisiting if a
+       training set with anthracnose on more than one site ever exists.
+131. **What an adversarial review of W5 found, and what it changed.** Five reviewers went over
+     the service, the registry, the card and the tests, and each finding was put to a verifier
+     whose job was to refute it. What survived, and is now fixed with a test:
+     - **The service crashed on three inputs it should have refused.** `coverage_target: null`
+       reached `float(None)` and became a 500; a `uri` the filesystem refuses (a NUL byte, a
+       name too long) escaped as a 500 and was never logged; and a stray `run.json` under the
+       heads root killed start-up with a bare `KeyError`. All three are now 422s or a reasoned
+       refusal, and all three are logged.
+     - **One bad frame spoiled a batch.** A picture that would not decode failed the whole
+       backbone call, so every other computed frame in that batch came back 422. Decoding is
+       per frame now, and only a failure of the backbone itself — which is the call's and not
+       any frame's — falls on all of them. `n_invalid` also counted 501s, which are frames
+       this deployment cannot answer rather than bad requests.
+     - **Every frame of a batch reported the whole call's wall clock** as its `timing_ms.total`,
+       because they shared one start. A frame's total is now its own: its validation, fetch and
+       hash, plus its share of the joint preprocessing and backbone, plus its head. N6 reads
+       that field (spec 006 US-11.2), so it mattered.
+     - **Four of FR-013's start-up checks were not there.** The data root, the request log's
+       folder, a malformed `max_batch` or `default_coverage`, and `frozen_manifest_modified` —
+       the last one being the check that the manifests behind `model_version` are still the
+       bytes the run was trained on. A missing head recipe silently dropped the pin of 121;
+       it is `bad_config` now.
+     - **`Settings.from_env` resolved relative paths against the working directory** and
+       ignored a mistyped `MS_SERVICE_CONFIG` — so the service could answer from a model
+       nobody chose, which is exactly what 114 set out to stop.
+     - **The card said things that were not true of this model.** It promised an anthracnose
+       output (130); it said "every split here is blocked by district or by capture date",
+       and iBean's is not; it asserted that calibration breaks under shift while this model's
+       own ECE out of domain is 0.010; it printed N2 without saying the rows are at coverage
+       1.0, abstention off; it did not say that 1,309 anthracnose rows of the Tanzania test
+       split are not scored at all, because this model has no such class; and it presented
+       angular leaf spot as an unseen disease without saying it comes from a set the model
+       trained the rest of (spec 004 Clarification 7). Each of those is now rendered from the
+       artefacts or stated plainly.
+     - **The card owed four attribution lines and printed two.** Its numbers are measured on
+       Tanzania and white mould, both CC BY 4.0, which require attribution wherever those
+       numbers go; only the training sets were listed. The licence table now separates
+       "trained on" from "evaluated on", says what each licence actually asks of us — CC0
+       asks for nothing, and the card says so while giving the line anyway — and prints every
+       attribution line in full.
+     - **N6 could never have reached the card.** Its rows have a seed, because N6 has no
+       five-seed aggregate (spec 006 US-11.3), and the card only quoted aggregates. It would
+       have printed "not measured" on Thursday with the rows sitting in the table.
+     - **What was refuted, and left alone.** The zero-width intervals on the two distance
+       scores are the right output of a stated estimator, not a misrepresentation: their bank
+       does not depend on the seed. The caching in `ms.registry` cannot go stale from any
+       call this repository makes. Two claimed 501 leaks do not reproduce.
+     - **And the tests themselves were reviewed.** Several asserted less than they claimed:
+       a 422 test that checked the status and not which check refused, so the data-root
+       containment could have been deleted; `ood_knn` and `ood_maha` compared by type rather
+       than value, so they could have been swapped; the response's provenance never compared
+       with the run; a coverage test whose assertions held whatever coverage the service
+       used; and a card test that checked ten of the forty rows it pulled. Each now compares
+       against what `ms.abstain` and the run actually say. The service also gained the
+       warning US-3.5's edge case asks for, when a frame's bytes are not the size it claims.
+     - **What is recorded rather than fixed.** v0 publishes the four endpoints' OpenAPI with
+       no request or response models, so the document describes the routes and not the
+       payloads; FR-003 and one test are what close the response shape. Declaring the payloads
+       to FastAPI is worth doing when a consumer reads the document (spec 006 US-3.1). And
+       `model_version` carries no token type, so the 224/CLS model and the 224/CLS ⊕
+       mean-patch model share a string and a card path — H8 §6.2 fixes that format, piece 1
+       reads it, and the run id is what tells the two apart in the meantime.
