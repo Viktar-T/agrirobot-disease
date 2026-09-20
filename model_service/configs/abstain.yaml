@@ -1,0 +1,36 @@
+# Abstention and calibration (S4.4; specs/004-abstention/spec.md FR-012), as H8 §6.6 and the
+# owner's decisions of 2026-09-20 fix them (DECISIONS 86-92). This file's sha256 is an input
+# of every fit, so a change here is a new fit — and, because a row's identity carries no fit
+# (spec 005 FR-004), it has to be settled before the first N3 row is written (DECISIONS 91).
+
+# The kNN score's neighbours, inside H8 §6.6's 10-50. The middle of the range by fiat: the
+# validation slice holds no unknown row, so there is nothing in domain to choose k by, and
+# choosing it on the held-out unknowns would be fitting on the exam (DECISIONS 86).
+k: 20
+
+# The declared coverages (US-3.1): tau_conf is the quantile of the confidence score that keeps
+# this share of the in-domain validation slice. The joint rule keeps less, and each block of
+# `thresholds` in abstain.json records what it achieved.
+coverages: [0.80, 0.90, 0.95]
+default_coverage: 0.90
+
+# The distance scores' own operating point, H8 §6.6's "threshold at TPR 95 % on in-domain
+# validation": tau_knn and tau_maha keep this share of the slice at every declared coverage,
+# so the coverage knob moves how much confidence the head must have and leaves the "is this
+# photo unlike anything I trained on" gate where it is (DECISIONS 94).
+distance_tpr: 0.95
+
+# The expected calibration error (US-9.1): equal-width bins over the largest probability.
+ece_bins: 15
+
+# The ridge on the Mahalanobis covariances, as epsilon * trace(Sigma) / D (FR-004).
+epsilon: 1.0e-06
+
+# N3's held-out sources (US-6.3): one per held-out set, never pooled (DECISIONS 79). iBean's
+# angular-leaf-spot rows are left out because iBean trains in one N2 direction, and
+# makerere_crops_v1's because the crops carry no healthy class (DECISIONS 46, 88).
+n3:
+  - manifest: makerere_v1
+    classes: [unknown_als]
+  - manifest: swm_v1
+    classes: [unknown_wm]

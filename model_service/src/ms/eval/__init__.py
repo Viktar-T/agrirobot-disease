@@ -71,8 +71,21 @@ NUMBERS = {
     "N7": "compute cost",
 }
 #: metric names (FR-005) and their qualifier: None (no qualifier), "class" (one of the row's
-#: classes) or "optional" (a target, or nothing)
-METRICS = {"macro_f1": None, "recall": "class", "balanced_accuracy": "optional"}
+#: classes), "optional" (a target, or nothing), "score" (one of spec 004's four scores) or
+#: "class?" (one of the row's classes, or nothing). S4.4 added the last five (spec 004 FR-009)
+METRICS = {
+    "macro_f1": None,
+    "recall": "class",
+    "balanced_accuracy": "optional",
+    "unknown_recall": None,
+    "auroc": "score",
+    "ece": None,
+    "selective_risk": None,
+    "abstention_rate": "class?",
+}
+#: the qualifier of auroc:<score> (spec 004 US-1.1); imported from ms.abstain would make the
+#: N-table depend on the abstention module, so the names are repeated here and tested there
+SCORE_NAMES = ("conf", "knn", "maha", "energy")
 #: the seeds of a reported number, and the Student t quantile for their 95 % interval
 SEEDS = (0, 1, 2, 3, 4)
 T_975_4 = 2.776445
@@ -146,6 +159,10 @@ def _metric_ok(metric: Any, classes: Any) -> bool:
         return not sep
     if kind == "class":
         return bool(sep) and isinstance(classes, list) and qualifier in classes
+    if kind == "class?":
+        return not sep or (isinstance(classes, list) and qualifier in classes)
+    if kind == "score":
+        return bool(sep) and qualifier in SCORE_NAMES
     return not sep or _text(qualifier)
 
 

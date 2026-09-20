@@ -77,6 +77,27 @@ and each writes its seconds to the compute log. `make eval` then scores them int
 N1 on each run's own test split, and N2 on the cross-dataset directions of
 `configs/eval.yaml` (a run over two manifests takes `--train-manifest a.jsonl b.jsonl`).
 
+## Abstention and calibration (S4.4)
+
+What lets the model say "I don't know" (`specs/004-abstention/spec.md`). Four post-hoc scores
+over a trained head: the confidence (its largest logit), the distance to the k-th nearest
+training feature, the relative Mahalanobis distance as a second opinion, and energy, logged
+only. A row abstains when the confidence falls below `tau_conf` or the distance rises above
+`tau_knn`, and `abstain_reason` names which. Every threshold, and the temperature that
+calibrates the probabilities, is fitted on the run's own **in-domain validation slice** and
+never on a test manifest.
+
+```bash
+make abstain                                   # every run under data/heads/ -> abstain.json
+make abstain ARGS="--run <run_id> --force"     # one of them, fitted again
+```
+
+The recipe is `configs/abstain.yaml`: `k`, the declared coverages, the distance scores' TPR,
+the ECE bins and N3's held-out sources. Its sha256 is an input of every fit, so a change there
+is a new fit — and, because a row's identity carries no fit, it has to be settled before the
+first N3 row is written (DECISIONS 91). A fit lands beside its run in
+`data/heads/<run_id>/abstain.json` (git-ignored) and writes one compute-log row.
+
 ## The site probe (N4)
 
 How easily the cached CLS features give away where a picture was taken: which bean set, and

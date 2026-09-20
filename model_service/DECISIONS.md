@@ -1285,3 +1285,58 @@ written: `ms.abstain` lands with the W4 "Scores" and "N3" tasks.
       test reads confidence on the angular-leaf-spot rows instead.
     - The suite is 215 passed, 50 failed, 1 skipped. The 4 green tests are the ones that check
       a malformed metric name is still refused.
+## 2026-09-20 — W4 · the abstention scores, thresholds and temperature (ahead of schedule)
+
+The work plan's W4 "Scores", on the 300-epoch head runs (80). `ms.abstain` and
+`ms.abstain.fit` exist, `configs/abstain.yaml` holds the recipe, and every run under
+`data/heads/` has its `abstain.json`. No N-table row was written: those come with the "N3"
+task, and the eval's rows of spec 004 US-6 to US-9 are still red.
+
+94. **The distance threshold sits at TPR 95 %, as H8 §6.6 says; only `tau_conf` moves with
+    the declared coverage.** Spec 004 US-3.1 said, when it was written that morning, that all
+    three thresholds move with the coverage — the work plan's S4.4 row reads that way. The
+    owner delegated the call on 2026-09-20, and the first real fit settled it: with both gates
+    at the `c` quantile the joint rule keeps about `c²`, which on Makerere was **0.64 of the
+    validation slice at a declared 0.80**. H8's rule keeps about `0.95 · c`.
+    - The spec was amended the same day, before any row existed (91 would have made it
+      permanent). `configs/abstain.yaml` gained `distance_tpr: 0.95`; `tau_knn` and `tau_maha`
+      now hold the same value in every `thresholds` block, and the work plan's "thresholds
+      {tau_conf, tau_knn, tau_maha} at declared coverages" is satisfied by each block carrying
+      all three.
+    - **Measured over the 181 fits**, achieved against declared coverage: 0.747–0.800 (median
+      0.781) at 0.80, 0.851–0.900 (median 0.871) at 0.90, and 0.897–0.940 (median 0.913) at
+      0.95. What an operating point is called now stays within a few points of what it does.
+    - Two more reasons, on the record: TPR 95 % is the operating point the OOD literature H8
+      cites reports (`[G93]`'s FPR@TPR95), so N3 stays readable beside it; and the coverage
+      knob now means one thing — how much confidence the head must have — with a constant "is
+      this photo unlike anything I trained on" gate underneath.
+95. **Every head run is fitted: 181 of them, 180 quotable.** `make abstain` over
+    `data/heads/`, 2 min 30 s end to end on the CPU, including the 91 runs of the superseded
+    50-epoch recipe (80), which cost almost nothing because they share their features with
+    the runs that replaced them.
+    - **The work is shared by group.** The kNN bank, the slice's kNN distances and the
+      Gaussians depend on the backbone, the resolution, the tokens and the manifests — not on
+      the head — so one call computes them once per group and every run of the group reads
+      them. Six groups at 224 on CLS (two backbones × Makerere, Tanzania, Makerere + iBean):
+      4.6 s for Makerere's 6,818-row bank, and the Tanzania groups, with 78k rows, dominate
+      the 2.5 minutes.
+    - A row's `wallclock_s` is its own share only, 0.04–0.06 s, as spec 003 US-6 keeps a
+      call's shared reading out of every run's seconds. The end-to-end number is here.
+    - A second `make abstain` fits nothing and adds no compute-log row (SC-6).
+96. **The heads were badly under-confident, and calibration is what fixes it.** The fitted
+    temperature is **0.085 to 0.211, median 0.152**, over all 181 runs: `softmax(z / T)` with
+    T ≈ 0.15 sharpens probabilities that were nearly uniform. Every run's slice likelihood
+    improved (`nll_after ≤ nll_before` everywhere); on the first Makerere linear run the mean
+    NLL fell from 0.399 to 0.093.
+    - This is the same shape as 69's finding about the linear head's logits: on L2-normalised
+      features a linear probe's logits are small (its `tau_conf` at coverage 0.90 is around
+      0.1), so the softmax is flat. The argmax is unaffected, which is why no N1 or N2 number
+      moves (spec 004 US-5.3), but a probability from an uncalibrated head meant nothing.
+    - The three heads sit on different scales, as their definitions say they should:
+      `tau_conf` at coverage 0.90 is about 0.1 for `linear` (a weighted sum), about 12 for
+      `proto` (a cosine over τ ≈ 0.07) and about −0.55 for `mix` (the log of a probability).
+      Thresholds are per run, so nothing compares them across heads.
+97. **The leakage rule holds on the real data, not only in a test.** Every one of the 181
+    fits records `train_split: train` and `val_split: val` of its own training manifests, and
+    every manifest it names is frozen. No test or held-out row was read while fitting (spec
+    004 SC-2), which is what makes the N3 numbers of the next task worth anything.

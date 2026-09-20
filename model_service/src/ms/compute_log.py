@@ -39,8 +39,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-#: Steps allowed in the "step" field ("env" is the W1 extension, see module docstring).
-STEPS = ("env", "extract", "train_head", "eval", "serve")
+#: Steps allowed in the "step" field ("env" is the W1 extension, see module docstring;
+#: "fit_abstain" is S4.4's, spec 004 FR-014).
+STEPS = ("env", "extract", "train_head", "fit_abstain", "eval", "serve")
 
 #: Row fields, in the order they are written.
 FIELDS = (

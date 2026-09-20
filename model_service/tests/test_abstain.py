@@ -32,6 +32,8 @@ from ms.heads import train as heads_train
 REPO = Path(__file__).resolve().parents[2]
 CONFIG = REPO / "model_service" / "configs" / "abstain.yaml"
 COVERAGES = (0.80, 0.90, 0.95)
+#: H8 §6.6's "threshold at TPR 95 % on in-domain validation" for the two distance scores
+DISTANCE_TPR = 0.95
 SCORES = ("conf", "knn", "maha", "energy")
 DECISION_SCORES = ("conf", "knn")
 REASONS = ("low_confidence", "far_from_training")
@@ -77,6 +79,7 @@ def config(tmp: Path, **changes) -> Path:
         "k": 5,
         "coverages": list(COVERAGES),
         "default_coverage": 0.90,
+        "distance_tpr": DISTANCE_TPR,
         "ece_bins": 15,
         "epsilon": EPSILON,
         "n3": [
@@ -434,7 +437,8 @@ def test_several_training_manifests_join_their_bank_and_their_slice(tmp_path, ca
 
 
 def test_each_threshold_keeps_its_declared_share_of_the_slice(tmp_path, capsys):
-    """US-3.1: tau_conf is the (1 - c) quantile of conf, tau_knn the c quantile of knn."""
+    """US-3.1: tau_conf is the (1 - c) quantile of conf, so the confidence gate keeps c of the
+    slice; the two distance thresholds sit at TPR 95 % whatever the coverage (H8 §6.6)."""
     abstain = _module("ms.abstain")
     world(tmp_path)
     meta = train(tmp_path)
@@ -443,11 +447,17 @@ def test_each_threshold_keeps_its_declared_share_of_the_slice(tmp_path, capsys):
     loaded, run = abstain.load_fit(folder), load_run(folder)
     slice_scores = abstain.scores(loaded, run, split_features(tmp_path, meta, "alpha", "val"))
     n = len(slice_scores["conf"])
+    blocks = fitted(tmp_path, meta["run_id"])["thresholds"]
     for c in COVERAGES:
-        tau = fitted(tmp_path, meta["run_id"])["thresholds"][f"{c:.2f}"]
+        tau = blocks[f"{c:.2f}"]
         assert abs((slice_scores["conf"] >= tau["tau_conf"]).sum() / n - c) <= 1 / n
-        assert abs((slice_scores["knn"] <= tau["tau_knn"]).sum() / n - c) <= 1 / n
-        assert abs((slice_scores["maha"] <= tau["tau_maha"]).sum() / n - c) <= 1 / n
+        for score in ("knn", "maha"):
+            kept = (slice_scores[score] <= tau[f"tau_{score}"]).sum() / n
+            assert abs(kept - DISTANCE_TPR) <= 1 / n
+    # one value per distance score, the same in every block: the coverage knob moves the
+    # confidence gate and leaves the "unlike anything I trained on" gate where H8 puts it
+    for score in ("knn", "maha"):
+        assert len({blocks[f"{c:.2f}"][f"tau_{score}"] for c in COVERAGES}) == 1
 
 
 def test_coverage_achieved_is_the_joint_rule_and_never_above_the_declared_one(tmp_path, capsys):
@@ -928,10 +938,13 @@ def test_the_committed_config_parses_with_the_keys_of_fr_012():
     """FR-012: one file, the shape configs/eval.yaml uses for its directions."""
     assert CONFIG.exists(), f"{CONFIG} does not exist yet (spec 004, W4)"
     cfg = yaml.safe_load(CONFIG.read_text(encoding="utf-8"))
-    assert set(cfg) == {"k", "coverages", "default_coverage", "ece_bins", "epsilon", "n3"}
+    assert set(cfg) == {
+        "k", "coverages", "default_coverage", "distance_tpr", "ece_bins", "epsilon", "n3",
+    }  # fmt: skip
     assert 10 <= cfg["k"] <= 50
     assert [float(c) for c in cfg["coverages"]] == list(COVERAGES)
     assert cfg["default_coverage"] == 0.90 and cfg["ece_bins"] == 15
+    assert cfg["distance_tpr"] == DISTANCE_TPR
     sources = {tuple(d["classes"]): d["manifest"] for d in cfg["n3"]}
     assert sources == {("unknown_als",): "makerere_v1", ("unknown_wm",): "swm_v1"}
 

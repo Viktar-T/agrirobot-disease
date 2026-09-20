@@ -15,7 +15,7 @@ RES ?= 224
 ARGS ?=
 
 .DEFAULT_GOAL := help
-.PHONY: help env env-check hub-check compute-log test lint fmt download manifests cache heads eval probe serve clean
+.PHONY: help env env-check hub-check compute-log test lint fmt download manifests cache heads abstain eval probe serve clean
 
 help: ## list the targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-13s\033[0m %s\n", $$1, $$2}'
@@ -62,6 +62,9 @@ cache: ## (W2, S4.2) extract features: BB=<backbone_id> RES=224|518 DS=<dataset>
 
 heads: ## (W3, S4.3) train the heads (five seeds)
 	$(PY) -m ms.heads.train --backbone $(BB) --res $(RES) $(ARGS)
+
+abstain: ## (W4, S4.4) fit each head run's thresholds and temperature -> data/heads/<run>/abstain.json
+	$(PY) -m ms.abstain.fit $(ARGS)
 
 eval: ## (W3-W4, S4.5) results/n_table.jsonl -> n_table.md + verdict.md
 	$(PY) -m ms.eval.run $(ARGS)
