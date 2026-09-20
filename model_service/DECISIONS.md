@@ -1428,3 +1428,59 @@ the 18 quotable five-seed aggregates of a number (2 backbones × 3 heads × 3 tr
        selective risk rises from 0.52 at coverage 1.0 to 0.60 at a declared 0.80 while 90 % of
        the rows are refused. There the scores keep the rows the head gets wrong. The crop rows
        are reported and not counted (79), and this is one more reason why.
+## 2026-09-20 — W4 · the two ablations: CLS ⊕ mean-patch, and 518/512 (ahead of schedule)
+
+The work plan's W4 "Repeat N1/N2 at 518/512 and with CLS ⊕ mean-patch", in that order: the
+richer fingerprint first at 224, then the high-resolution pass on the caches the other work
+stream committed (83). 180 new head runs, all of them fitted (S4.4) and scored, so the table
+now holds N1–N3 at both resolutions, which is H8 §6.11's third acceptance criterion.
+
+104. **The arms, and what they cost.** 90 runs at 224 on `cls+meanpatch` (2,048-d) and 90 at
+     518 for DINOv2 / 512 for DINOv3 on `cls`, each three heads × five seeds × the three
+     training sets, with `make abstain` and `make eval` after them.
+     - The table went from 13,357 rows to 25,661, of which 18,492 are current and 3,070 are
+       five-seed aggregates: 1,022 at 224/cls, 1,024 at 224/cls+meanpatch, 513 at 518/cls and
+       511 at 512/cls. Every row passes `validate_row` against the frozen list, and
+       `unpaired` is empty, so the verdict can be computed (spec 005 US-4.1).
+     - The compute log (N7) has it to the second: **556 s** for the 180 head runs (10.5 min
+       of wall-clock, 06:33 to 06:44 UTC), **10.8 s** of own seconds for the 180 fits inside
+       8.3 min of wall-clock, and **3,146 s** for the `make eval` that scored them. The
+       scoring is the cost of the kNN distances against banks of up to 78k rows, at 2,048
+       dimensions for half of the new groups.
+     - **A correction to 98**, which said the first N3 `make eval` took 45 minutes: that was a
+       guess from the clock, and the compute log says **655 s**. The log is the number to
+       quote; 98's sentence is wrong and this is the correction.
+105. **The richer fingerprint does not help the number that matters, and hurts it.** Against
+     224/cls, over the 18 quotable (backbone, head, direction) N2 aggregates,
+     `cls+meanpatch` moves macro-F1 by **−3.53 pp on average** (−14.00 to +5.04).
+     - The losses are all on **Tanzania → iBean**: −11.67 to −14.00 pp for the proto and mix
+       heads of both backbones. The gains are all on **Makerere + iBean → Tanzania**, up to
+       +5.04 pp. A richer fingerprint appears to help when the training set already spans two
+       datasets and to hurt when it is one.
+     - N1 does not move at all (+0.03 pp on average, −0.26 to +0.36): every in-domain number
+       is already above 0.99, so this ablation cannot be read there.
+     - It does help the unknown detector: `auroc:knn` on the held-out sets gains **+2.05 pp**
+       on average (up to +19.49), and the worst ALS aggregate rises from 0.444 to 0.603 — the
+       below-chance case of 100 disappears. `auroc:conf` gains +2.98 pp.
+106. **More pixels buy DINOv2 about 1.5 pp on N2 and DINOv3 nothing.** 518/cls moves N2
+     macro-F1 by **+1.45 pp** on average (−2.88 to +4.60) against 224/cls; 512/cls moves it by
+     **+0.13 pp** (−10.75 to +8.91), so the second is a wash with a wide spread. N1 again does
+     not move (+0.11 and +0.34 pp).
+     - Neither high-resolution arm helps on the unknowns: `auroc:knn` moves −1.17 pp at 518
+       and +0.46 pp at 512, and 518 makes angular leaf spot **worse** (median 0.559 against
+       0.632 at 224).
+     - The pass cost about a GPU-day of extraction (83) and 52 min of CPU here. On these
+       numbers the 224 features are what the service should serve, and the high-resolution
+       cache is worth keeping for the record rather than for the operating point.
+107. **Neither ablation rescues angular leaf spot.** Its `auroc:knn` median is 0.632 at
+     224/cls, 0.635 with the richer fingerprint, 0.637 at 512 and 0.559 at 518, against
+     0.998–1.000 for white mould everywhere. The failure of 100 is not a resolution problem
+     and not a pooling problem: a leaf spot photographed like the training photos is not far
+     from them in feature space, whatever the features. What would test it is a held-out set
+     that is a new disease *without* being a new dataset, and piece 5's negative control (N5)
+     is the nearest thing the plan has.
+     - **The verdict is unaffected**: it reads 224 px, CLS, coverage 1.0 (spec 005 US-6.1), so
+       the ablation rows sit beside those and never in them. For the record, at 224/cls the
+       champion leads the challenger on the N2 mean over the three frame directions by 0.96 to
+       2.31 pp with all three heads, and the richer fingerprint widens that lead rather than
+       closing it.
