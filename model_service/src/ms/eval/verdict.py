@@ -31,6 +31,9 @@ from typing import Any
 from ms.eval import RESULTS, unpaired
 
 VERDICT_MD = RESULTS / "verdict.md"
+#: a verdict is written beside the table it was computed from; `make eval` derives the path
+#: from --n-table, so a run over another table can never write over this one
+VERDICT_NAME = VERDICT_MD.name
 
 CHAMPION = "dinov2_l14_reg"
 CHALLENGER = "dinov3_l16"
@@ -46,6 +49,20 @@ EPS = 1e-9
 DECISION_SCORES = ("auroc:conf", "auroc:knn")
 HELD_OUT = ("unknown_als", "unknown_wm")
 N4_TARGETS = ("balanced_accuracy:dataset", "balanced_accuracy:district")
+
+
+class VerdictError(ValueError):
+    """A verdict that may not be written; `reason` says why."""
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+def beside(n_table: Path | str) -> Path:
+    """The verdict of a table lives beside it. `make eval` uses this unless --verdict says
+    otherwise, so that a run over a temporary table writes a temporary verdict."""
+    return Path(n_table).parent / VERDICT_NAME
 
 
 def _stem(joined: str) -> str:
@@ -191,6 +208,13 @@ def decide(rows: Iterable[dict[str, Any]], directions: list[dict[str, Any]]) -> 
     the caller (US-6.1)."""
     rows = list(rows)
     read = readable(rows)
+    if not read:
+        raise VerdictError(
+            "no_rows",
+            "no row to read: the verdict reads the quotable five-seed aggregates that are not "
+            f"superseded, at {RES} px, on {TOKENS.upper()}, at coverage {COVERAGE:.1f}, and the "
+            "table has none. A verdict with no comparison behind it is not a verdict",
+        )
     counted_dirs = counted(directions)
     n2, n3, n4 = _n2(read, counted_dirs), _n3(read), _n4(rows)
     out: dict[str, Any] = {
@@ -389,7 +413,12 @@ def main(argv: list[str] | None = None) -> int:
     if missing:
         print(f"unpaired: {missing}", flush=True)
         return 2
-    print(json.dumps(decide(rows, load_directions(args.config)), indent=1, default=str))
+    try:
+        v = decide(rows, load_directions(args.config))
+    except VerdictError as exc:
+        print(f"{exc.reason}: {exc}", flush=True)
+        return 2
+    print(json.dumps(v, indent=1, default=str))
     return 0
 
 

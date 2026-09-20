@@ -753,3 +753,58 @@ def test_make_eval_refuses_the_verdict_while_a_number_is_unpaired(tmp_path, caps
     text = capsys.readouterr().out
     assert "unpaired:" in text and "verdict: refused" in text
     assert not (tmp_path / "verdict.md").exists()
+
+
+def test_a_verdict_is_never_rendered_from_no_rows(tmp_path):
+    """US-6.1: a verdict with no comparison behind it is not a verdict. It would still name a
+    winner — the champion, by "anything else" — and reading it, nobody could tell it from one
+    that had measured something."""
+    path = tmp_path / "verdict.md"
+    for rows in (
+        [],
+        [row()],
+        [n2_row(CHAMP, "linear", "tanzania_v1", "makerere_v1", 0.5, res=518)],
+    ):
+        with pytest.raises(verdict.VerdictError) as caught:
+            verdict.write_verdict(rows, DIRECTIONS, path)
+        assert caught.value.reason == "no_rows"
+        assert not path.exists()
+    # and with rows it reads, it writes
+    written, v = verdict.write_verdict(
+        table_for(flat(0.50, 0.50), lambda *a: 0.80), DIRECTIONS, path
+    )
+    assert written is True and v["rows_read"] > 0
+    assert path.exists()
+
+
+def test_make_eval_writes_the_verdict_beside_its_own_table(tmp_path, capsys):
+    """US-6.1: `--verdict` follows `--n-table`. A run over another table — a test's, say —
+    must not be able to write over `results/verdict.md`, which is how the committed verdict
+    of 2026-09-20 came to say it had read 0 rows (DECISIONS 111)."""
+    (tmp_path / "eval.yaml").write_text("n2: []\n", encoding="utf-8")
+    table = tmp_path / "somewhere" / "n_table.jsonl"
+    table.parent.mkdir()
+    argv = [
+        "--heads-root", str(tmp_path / "heads"), "--cache-root", str(tmp_path / "cache"),
+        "--manifest-root", str(tmp_path / "manifests"), "--config", str(tmp_path / "eval.yaml"),
+        "--n-table", str(table), "--md", str(tmp_path / "n_table.md"),
+        "--compute-log", str(tmp_path / "log.jsonl"),
+    ]  # fmt: skip
+    assert verdict.beside(table) == table.parent / "verdict.md"
+    real = Path(verdict.VERDICT_MD)
+    before = real.read_text(encoding="utf-8") if real.exists() else None
+
+    # a paired table, so the verdict is written and not refused: five()'s N1 aggregate is the
+    # champion's linear head at 224 on CLS, and one N2 aggregate beside it pairs it
+    rows = n_table.aggregate(five()) + [n2_row(CHAMP, "linear", "tanzania_v1", "makerere_v1", 0.5)]
+    n_table.append_rows(rows, table)
+    assert n_table.unpaired(n_table.read_rows(table)) == []
+    assert eval_run.main(argv) == 0
+    text = capsys.readouterr().out
+
+    mine = table.parent / "verdict.md"
+    assert mine.exists(), "the verdict was not written beside its own table"
+    assert "wins" in text and str(mine.parent.name) in text.replace("\\", "/")
+    assert (real.read_text(encoding="utf-8") if real.exists() else None) == before, (
+        "make eval over another table wrote over the repository's verdict"
+    )

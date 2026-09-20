@@ -67,6 +67,8 @@ The rules are H9 §7's, copied verbatim below. H9 §7 was last changed on 2026-0
 1. `make eval` writes `results/verdict.md` from the table alone, by code, and nobody edits it by hand.
    - It reads the quotable aggregate rows that are not superseded (US-8), at 224 px, CLS, coverage 1.0.
    - It refuses to run while `unpaired` lists anything (US-4.1).
+   - **It refuses to render from an empty read** (`no_rows`): a verdict with no comparison behind it is not a verdict, and writing one would replace a real verdict with a vacuous one that still names a winner. Added on 2026-09-20 after exactly that happened (DECISIONS 111).
+   - **A verdict is written beside the table it was computed from.** `--verdict` defaults to `verdict.md` in `--n-table`'s directory, never to a fixed path, so a run over another table — a test's, say — cannot write over `results/verdict.md`.
 2. The champion is `dinov2_l14_reg` and the challenger `dinov3_l16`.
 3. **Criterion 1: N2.** The metric is macro-F1 on the shared classes, in the three directions: Tanzania → Makerere (frames), Tanzania → iBean, Makerere + iBean → Tanzania. The crop-level rows (rust recall) are reported, not counted. The challenger wins criterion 1 when, with each of the three heads, both hold:
    - its mean over the three directions is at least 2 pp above the champion's;

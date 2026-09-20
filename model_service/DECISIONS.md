@@ -1529,3 +1529,40 @@ edits `results/verdict.md` by hand. Spec 005 US-6 has its code and its 11 accept
      unknowns is real but partial: better on the distance score, worse on confidence, and only
      on one of the two held-out sets. On the pre-declared rules that is not a win, and the rules
      were written before anyone had seen a number.
+## 2026-09-20 — W4 · the verdict the test suite wrote over (found by the owner)
+
+`results/verdict.md` as committed in `3cbf8cd` said it had read **0 rows**, and every head's
+criterion-1 row said "a direction is missing". It still named a winner — the champion, by
+"anything else goes to the champion" — which is the right answer for the wrong reason, and is
+why it went unnoticed: the headline matched the verdict computed from the real table minutes
+earlier. The owner spotted it.
+
+111. **A test wrote over `results/verdict.md`, because the verdict had a fixed default path.**
+     - **What happened.** `--verdict` defaulted to `model_service/results/verdict.md`. Ten
+       places in the tests call `ms.eval.run.main()` with a temporary `--n-table` and `--md`;
+       only the one written with the verdict passed `--verdict`. So every one of the others
+       computed a verdict from its own synthetic table and wrote it into the repository. The
+       last such test in the suite left the file behind, `git add model_service/results/`
+       staged it, and it was committed. Reproduced against `3cbf8cd` before fixing it: one
+       `make eval` over a temporary table prints
+       `model_service/results/verdict.md: ... (rewritten)`.
+     - **The fix is the default, not the tests.** A verdict is now written beside the table it
+       was computed from: `--verdict` defaults to `verdict.md` in `--n-table`'s directory
+       (`ms.eval.verdict.beside`). A run over another table cannot reach this one, whatever it
+       passes or forgets to pass. Spec 005 US-6.1 says so.
+     - **And a verdict from nothing is refused.** `decide` raises `VerdictError("no_rows")`
+       when the table has no row it may read, and `make eval` prints the reason and leaves the
+       file alone. The vacuous file could not have been written under this rule even with the
+       old default. Spec 005 US-6.1 says this too.
+     - **Two tests, both of which fail against `3cbf8cd`**: one renders from an empty table,
+       from a table of per-seed rows only and from a table of 518 px rows only, and expects
+       the refusal and no file; the other runs `make eval` over a temporary table with a
+       paired number in it and asserts the verdict landed beside that table while the
+       repository's file kept its bytes.
+     - **The file itself was not hand-edited.** `make eval` wrote it again from the table:
+       306 rows read, 43 rows of comparison, the same outcome as 108 with the working behind
+       it. The whole suite now runs without changing `results/verdict.md` or
+       `results/n_table.jsonl` by a byte, which is checked by hashing them either side of it.
+     - **What to take from it.** A number that agrees with what you expect is the one you
+       check hardest. The verdict's own text now carries how many rows it read, which is what
+       made the failure legible at a glance — that field earned its place.
