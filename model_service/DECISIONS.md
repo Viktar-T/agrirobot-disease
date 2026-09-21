@@ -2061,3 +2061,25 @@ owns the folder; piece 5's own report is a different document, and the hand-over
      - The section also states what the card states and a legend could miss: the served model
        has **two** classes, healthy and rust, because neither of its training manifests holds
        an anthracnose row (130).
+
+## 2026-09-21 — W6 · the stretch items, not attempted
+
+144. **ACRE and the CLIP-fusion arm are left undone, by the owner's instruction, and the
+     line stays unticked** — as the W5 "ROS 2 client" line does, because a tick would say
+     they were considered and finished. Neither blocks anything: H8 §6.11's six acceptance
+     criteria do not mention either.
+     - **ACRE is a download this week never started.** `configs/datasets/acre.yaml` holds the
+       Zenodo record (8102217, CC BY 4.0, 1.2 GB) and a `hold` line from spec 001
+       Clarification 7; `data/raw/` holds no `acre`. Picking it up means the download, a
+       manifest whose every row is class `none`, an extraction pass per backbone and
+       resolution, and then a metric that **spec 005 does not have**: a false-positive rate on
+       frames with no true class is not `macro_f1`, `recall:<class>` or `selective_risk`. That
+       last part is the real cost, and it is a spec change, not an afternoon.
+     - **The CLIP-fusion arm contradicts H8 itself, and that is the owner's to settle.**
+       §6.1's non-goals say, in as many words, "no fusion with CLIP-family backbones (evidence
+       says it helps `[C123]`, but it is a leaderboard step, not a pipeline step)"; §6.10's W6
+       lists "CLIP-fusion arm" as a stretch item. Both sentences are H8's and they cannot both
+       hold. Nobody should write the arm until one of them is withdrawn — and the non-goal is
+       the one with a reason attached.
+     - What W6 did with the time instead is in 135–143: the compute log's check, the
+       evaluation note, and the two hand-over sections.
