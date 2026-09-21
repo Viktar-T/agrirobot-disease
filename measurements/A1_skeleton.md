@@ -453,6 +453,10 @@ quotes both numbers or neither.
 only for a run trained on one manifest and it trains on two. That is a gap in the harness, not
 a number that came out badly.
 
+**"The first" is H8's word, not a measurement.** Nothing in this note establishes that these
+are the first blocked cross-dataset bean numbers; that is a literature claim and belongs to
+A1's related-work section, checked there.
+
 ### Claim B — *how much of the signal is the acquisition site*
 
 > A large share of the open sets' signal is the acquisition site: a probe predicts

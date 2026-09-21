@@ -2031,3 +2031,33 @@ owns the folder; piece 5's own report is a different document, and the hand-over
        plan. The asymmetry of 139 makes 0.889 the number a reader will quote, and duplicates
        were removed by sha256 and grouped by pHash *within* each manifest, never *between*
        Makerere/iBean and Tanzania. The note says so where the number is.
+
+## 2026-09-21 — W6 · the hand-over to pieces 5 and 6
+
+142. **A hand-over is a section in the consumer's own README, not a document of piece 4's.**
+     `store/README.md` already carries "Hand-over from piece 4 (W2, 2026-09-19)" for the
+     manifests and caches, so `measurements/README.md` and `plot_map/README.md` now carry
+     theirs, in the same shape: a table of what the consumer gets, the format of the thing it
+     reads, the rules that matter when reading it, and a named list of what is missing and
+     whose it is. The piece that reads an artefact keeps the description of it where it will
+     be looked for. `model_service/README.md` gets only a table of which document is for whom.
+     - Piece 5's section carries the one filter that decides what may be quoted — current,
+       quotable, `seed is None` — and says that `N5` is **already** a valid `number` in
+       `ms.eval.NUMBERS`, so the negative control is appended with `validate_row` /
+       `append_rows` / `aggregate` / `write_md` and needs no change to spec 005.
+     - Piece 6's section says what the other two do not have to: **the log has no rows.** It is
+       the first line of the section, because a schema with no data reads as a finished
+       hand-over until someone tries to query it.
+143. **The piece-6 hand-over quotes two rows the service really wrote.** They were produced by
+     calling `/v1/predict` twice on iBean test frames — one answered, one with a wrong
+     `frame.sha256` — with `MS_REQUEST_LOG` pointed at a scratch file, so
+     `data/predictions/requests.jsonl` is still absent and "zero rows" stays true. A schema
+     printed as a field list does not show what piece 6 has to branch on; two rows do.
+     - The rows make the three cases explicit, and the third is the one a map gets wrong:
+       `status` 200 with `decision: "abstain"` is **verification load**, and `status` 422 with
+       `abstain_reason: "invalid_input"` is a **broken frame that must show as absent**. Both
+       are `decision: "abstain"`, so branching on `decision` alone draws the wrong map — which
+       is exactly what piece 6's own definition of done tests for.
+     - The section also states what the card states and a legend could miss: the served model
+       has **two** classes, healthy and rust, because neither of its training manifests holds
+       an anthracnose row (130).

@@ -201,4 +201,20 @@ evaluation and service benchmark appends its own row with `wallclock_s`.
 ```bash
 python -m ms.compute_log record-env   # idempotent: an unchanged machine adds no row
 python -m ms.compute_log show
+make compute-log-check                # every cache and every head run on disk has a row; exit 1 if not
+make compute-log-summary              # wall-clock per step and the campaign's GPU-hours (claim D)
 ```
+
+`compute-log-check` reads `data/cache/` and `data/heads/` against the log and fails when an
+artefact there has no row. The other direction is a note and not a failure: a run whose folder
+was deleted keeps its row, because the log is a ledger of compute spent and not an index of
+what survived.
+
+## The results, and who reads them (W6)
+
+| Document | What it is | For |
+|---|---|---|
+| `measurements/A1_skeleton.md` | the evaluation note: method, the N-table, the abstention curves, claims A–D with a measured number or an honest blank, three surprises, what the numbers do not show, and the eight blanks in one list | H8 §6.11 items 5 and 6; the skeleton of article A1 |
+| `measurements/README.md` → "Hand-over from piece 4" | what piece 5 gets from `n_table.jsonl`, how to read a row, and how to add N5 and the colour-normalisation ablation to the same table | piece 5 |
+| `plot_map/README.md` → "Hand-over from piece 4" | what piece 6 gets from the prediction log, the three kinds of row, and why the log has no rows yet | piece 6 |
+| `store/README.md` → "Hand-over from piece 4" | the manifests and feature caches under DVC (W2) | piece 3 |
