@@ -1923,13 +1923,23 @@ of its sentence: the compute log.
      - The abstention fit is audited too, although W6 names only extractions and head runs:
        spec 004 FR-014 asks for its row, and the artefact sits in the same folder.
 136. **A row whose artefact is gone is a note, not a hole.** 61 `train_head` rows name run
-     folders that no longer exist: the **60 retired 50-epoch runs** of 4ada0f4 (two backbones
-     × three heads × five seeds × Makerere and Tanzania) and the **one iBean run of the W2
-     vertical slice**. The compute was spent, and the log is a ledger of compute rather than
-     an index of what survived, so `check` reports them under "no artefact" and stays green;
-     only an artefact *without* a row fails it. One run,
+     folders that no longer exist, and this file already holds both reasons: the **60 runs
+     deleted and trained again** when k-means was pinned to one thread (67 — two backbones ×
+     three heads × five seeds × Makerere and Tanzania, all on 2026-09-19 between 15:00 and
+     15:57), and the **one iBean slice run** whose early stopping followed macro-F1 (34).
+     None of the 61 has an N-table row. The compute was spent, and the log is a ledger of
+     compute rather than an index of what survived, so `check` reports them under "no
+     artefact" and stays green; only an artefact *without* a row fails it. One run,
      `dinov2_l14_reg-224-linear-cls-s0-7fcbe193`, carries two `fit_abstain` rows for the same
      reason — it was fitted twice.
+     - **A correction to what the commit of 135 and the first W6 tick said**: these are *not*
+       the retired 50-epoch runs. Those runs' folders are still on disk — 61 of them, with
+       `max_epochs: 50` in their `run.json`, exactly as 80 said they would be ("the old runs'
+       folders stay under `data/heads/`") — and it is their **N-table rows** that carry the
+       `superseded` mark, because rows are never deleted. Two retirements of 61 runs each, on
+       two days, retired in opposite ways: one deleted its folders and kept its log rows, the
+       other kept its folders and marked its table rows. Only the first leaves the "no
+       artefact" note that `check` prints.
 137. **The campaign is 7.30 h of logged compute, 5.72 of them GPU-hours, and 98.7 % of the
      GPU is extraction.** `make compute-log-summary` adds up the rows N7 asks to total and
      claim D quotes, from the log itself rather than from anyone's memory of the clock:
