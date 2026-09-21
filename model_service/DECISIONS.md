@@ -1962,3 +1962,72 @@ of its sentence: the compute log.
        work stream's hours are not in it. The article's sentence has to say "the campaign as
        the harness logged it, on one RTX 5060 Laptop (8 GB)", which is the machine of the
        log's one `env` row.
+
+## 2026-09-21 — W6 · the evaluation note, `measurements/A1_skeleton.md`
+
+The work plan's second W6 task, and H8 §6.11 items 5 and 6. One page in the plan's sense: the
+method, the N-table, the abstention curves, claims A–D each with a measured number or an
+honest blank, three sentences of what surprised us, and the list of what the numbers do not
+show. It is filed in `measurements/` because that is where the plan puts it, although piece 5
+owns the folder; piece 5's own report is a different document, and the hand-over task says so.
+
+138. **Every number in the note names the artefact it came from, and the note names the
+     artefacts' hashes.** The header carries the sha256 of `n_table.jsonl` and
+     `compute_log.jsonl` and the repository's commit, and each section says which command
+     regenerates its inputs (`make eval`, `make bench`, `make compute-log-summary`). Nothing
+     was typed from memory: the tables were dumped from the current, quotable, five-seed
+     aggregates (3,070 of the table's 25,677 rows) and the derived figures — the selective
+     accuracy abstention buys, the campaign's hours, the ablation means — were computed, not
+     estimated. Reversed the day someone edits a number in the note by hand; then the note
+     needs a renderer, as the card has one.
+139. **Three findings the plan did not anticipate, and they are the note's three surprises.**
+     - **Transfer is asymmetric, and the bigger training set is the worse teacher.** 78,454
+       Tanzanian frames give macro-F1 **0.362** on Makerere — two to three points above
+       answering "healthy" every time — while 7,422 Makerere + iBean frames give **0.889** on
+       Tanzania. H8 §6.7's guard-rail was "if N1 is not ≫ N2, suspect leakage"; N1 ≫ N2 holds
+       (0.991–0.996 against 0.346–0.889), and it is the *direction* that surprises.
+     - **A declared coverage is an in-domain promise only.** At declared coverage 0.90 the
+       champion's linear head abstains on 6.9 % of Makerere frames in domain and on **69.5 %**
+       of Tanzanian frames in its best cross-dataset direction, because the distance gates,
+       fitted at TPR 95 % on the training set's own validation rows, see most of another
+       dataset as unfamiliar. They are not wrong; the label is. **Every selective number in
+       the article must carry the achieved abstention rate beside it.**
+     - **Temperature scaling helps where nothing was broken.** In-domain ECE is 0.0008–0.0118;
+       on the two hard cross-dataset directions it is 0.327–0.472. An honest "80 % sure" in
+       domain is a meaningless "80 % sure" on another farm.
+     - A fourth, kept out of the three because it is about a head and not about the study: the
+       **proto head's confidence is unusable as an abstention score out of domain** — it
+       abstains on 0.0–0.2 % of rows at every declared coverage on two of the three directions
+       and its selective risk does not move. It is confident and wrong.
+140. **Claim B is half a claim, claim C is a tie, and claim D needs a third cost.**
+     - **A** is measured in full: N1 → N2 and the +11.18 pp mean that abstention buys at
+       declared coverage 0.90.
+     - **B**'s first half is measured and strong — the site probe reads the dataset at 98.3 %
+       and 99.2 % balanced accuracy against a chance of 33.3 %, and the Makerere district at
+       76.8 % and 77.0 % against 8.3 %. Its second half, what colour normalisation moves, is
+       **piece 5's and unrun**: two blanks, and the article may not imply the direction.
+     - **C** is measured and the answer is that **neither backbone won either criterion**. The
+       champion keeps the seat by a pre-declared default, not by a margin. The note reports
+       that as a result rather than as an absence of one.
+     - **D** is measured — 4 transfer directions, 270 head runs, **5.72 GPU-hours** of 7.30 h
+       logged, extraction 98.7 % of the GPU and a head 3.79 s — and the plan's sentence needs
+       one more term. There is a **third cost**: scoring the table is 4,066.5 s, more than
+       twice the head training, because every run's kNN queries a bank of up to 78k features.
+       The article's sentence is *extraction is the GPU cost, heads are free, and scoring is
+       what you pay for abstention*.
+141. **The end-to-end mission is blank 1, and it is first on purpose.** H8 §6.11 item 1 is not
+     met: no mission has been scored end to end, no real bag frame has reached the service
+     (`mcap://` is a 501), and `data/predictions/requests.jsonl` has **zero rows**, because
+     piece 2 is a placeholder. The 501 is 28 and 37; the rest is the W5 "ROS 2 client" entry
+     of the work plan, which lists the four things that have to exist before a mission can be
+     replayed, none of them piece 4's. The note states this as a blank in its own numbered
+     list and nowhere as a claim, and §5 says in as many words that the article may not say
+     the system was demonstrated end to end. The other blanks are N5 and the colour-normalisation
+     ablation (piece 5), an N1 for any run trained on more than one manifest (129), a home for
+     the challenger's licence status (§6.11 item 4), a between-dataset near-duplicate search,
+     a declared laptop-CPU timing, and the two stretch items — eight in all, listed in §6 of
+     the note.
+     - **Why a between-dataset near-duplicate search is now on the list**: it was not in the
+       plan. The asymmetry of 139 makes 0.889 the number a reader will quote, and duplicates
+       were removed by sha256 and grouped by pHash *within* each manifest, never *between*
+       Makerere/iBean and Tanzania. The note says so where the number is.
