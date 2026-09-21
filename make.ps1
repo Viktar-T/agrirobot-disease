@@ -27,7 +27,7 @@ $py = @('uv', 'run', 'python')
 
 switch ($Target) {
     'help' {
-        Write-Host 'targets: env, compute-log, env-check, hub-check, test, lint, fmt, download, manifests, cache, heads, abstain, eval, card, register, bench, probe, serve, clean'
+        Write-Host 'targets: env, compute-log, compute-log-check, compute-log-summary, env-check, hub-check, test, lint, fmt, download, manifests, cache, heads, abstain, eval, card, register, bench, probe, serve, clean'
     }
     'env' {
         Invoke-Step @('uv', 'sync')
@@ -38,6 +38,8 @@ switch ($Target) {
         Invoke-Step ($py + @('-m', 'ms.compute_log', 'record-env'))
     }
     'compute-log' { Invoke-Step ($py + @('-m', 'ms.compute_log', 'record-env') + $ArgsRest) }
+    'compute-log-check' { Invoke-Step ($py + @('-m', 'ms.compute_log', 'check') + $ArgsRest) }
+    'compute-log-summary' { Invoke-Step ($py + @('-m', 'ms.compute_log', 'summary') + $ArgsRest) }
     'env-check' {
         Invoke-Step ($py + @('-c', "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'cpu')"))
     }

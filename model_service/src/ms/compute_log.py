@@ -24,6 +24,8 @@ and from the command line:
 
     python -m ms.compute_log record-env     # idempotent: same machine -> no new row
     python -m ms.compute_log show
+    python -m ms.compute_log check          # every extraction and every head run has a row
+    python -m ms.compute_log summary        # wall-clock per step and the campaign's GPU-hours
 """
 
 from __future__ import annotations
@@ -34,7 +36,8 @@ import platform
 import shutil
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -282,6 +285,198 @@ def record_env(
     )
 
 
+# --- the audit: every extraction and every head run has a row (W6) ---------
+#
+# The log is a ledger of compute spent, so the two directions are not the same
+# check. An artefact on disk with no row is a hole in N7 and fails `check`. A row
+# whose artefact is gone is not: the run happened and cost what it cost, and the
+# folder was superseded or deleted afterwards. `check` reports those separately.
+
+#: Where the artefacts a row accounts for live. These repeat ms.cache.CACHE_ROOT and
+#: ms.heads.HEADS_ROOT rather than importing them: both of those modules import torch,
+#: and this one is meant to run on a machine that has none (see the module docstring).
+CACHE_ROOT = REPO_ROOT / "data" / "cache"
+HEADS_ROOT = REPO_ROOT / "data" / "heads"
+
+
+def extractions_on_disk(cache_root: Path | str | None = None) -> set[tuple[str, int, str, str]]:
+    """(backbone_id, res, cache_key, manifest) of every complete feature cache:
+    `data/cache/<backbone_id>/<res>/<cache_key>/<manifest>.npz` (spec 002 FR-001).
+    A `.shards` folder without its `.npz` is a run that did not finish and is not one."""
+    root = Path(cache_root) if cache_root is not None else CACHE_ROOT
+    found: set[tuple[str, int, str, str]] = set()
+    for npz in root.glob("*/*/*/*.npz"):
+        backbone_id, res, key = npz.parts[-4], npz.parts[-3], npz.parts[-2]
+        if res.isdigit():
+            found.add((backbone_id, int(res), key, npz.stem))
+    return found
+
+
+def _runs_on_disk(heads_root: Path | str | None, filename: str) -> set[str]:
+    root = Path(heads_root) if heads_root is not None else HEADS_ROOT
+    if not root.exists():
+        return set()
+    return {p.name for p in root.iterdir() if (p / filename).is_file()}
+
+
+def head_runs_on_disk(heads_root: Path | str | None = None) -> set[str]:
+    """The run_id of every head run: `data/heads/<run_id>/run.json` (spec 003)."""
+    return _runs_on_disk(heads_root, "run.json")
+
+
+def abstain_fits_on_disk(heads_root: Path | str | None = None) -> set[str]:
+    """The run_id of every abstention fit: `data/heads/<run_id>/abstain.json`
+    (spec 004 FR-002, whose FR-014 asks for the row)."""
+    return _runs_on_disk(heads_root, "abstain.json")
+
+
+def _extract_key(row: dict[str, Any]) -> tuple[str, int, str, str] | None:
+    cache = row.get("cache") or {}
+    backbone_id, res = row.get("backbone_id"), row.get("res")
+    key, manifest = cache.get("cache_key"), cache.get("manifest")
+    if not (backbone_id and res and key and manifest):
+        return None
+    return (backbone_id, int(res), key, str(manifest).removesuffix(".jsonl"))
+
+
+def _run_id_key(field: str) -> Callable[[dict[str, Any]], str | None]:
+    def key(row: dict[str, Any]) -> str | None:
+        return (row.get(field) or {}).get("run_id")
+
+    return key
+
+
+def _logged(rows: list[dict[str, Any]], step: str, key: Callable) -> dict[Any, int]:
+    """How many rows of `step` name each artefact, and how many name none."""
+    counts: dict[Any, int] = {}
+    for row in rows:
+        if row.get("step") == step:
+            counts[key(row)] = counts.get(key(row), 0) + 1
+    return counts
+
+
+@dataclass(frozen=True)
+class Audit:
+    """What the compute log accounts for, against what is on disk.
+
+    `missing` is what W6 asks about: artefacts with no row. `unbacked` is the other
+    direction, rows for artefacts that are gone, which is a note and not a failure.
+    `counted` is (artefacts on disk, rows of that step) per kind.
+    """
+
+    missing: dict[str, list]
+    unbacked: dict[str, list]
+    counted: dict[str, tuple[int, int]]
+
+    @property
+    def ok(self) -> bool:
+        return not any(self.missing.values())
+
+
+#: kind -> (step, how a row of that step names its artefact, how to list them on disk)
+_KINDS = {
+    "extraction": ("extract", _extract_key, extractions_on_disk),
+    "head run": ("train_head", _run_id_key("head"), head_runs_on_disk),
+    "abstention fit": ("fit_abstain", _run_id_key("abstain"), abstain_fits_on_disk),
+}
+
+
+def audit(
+    path: str | Path | None = None,
+    *,
+    cache_root: Path | str | None = None,
+    heads_root: Path | str | None = None,
+) -> Audit:
+    """Read the log and the artefact roots, and say what each does not account for."""
+    rows = list(read_rows(path))
+    missing: dict[str, list] = {}
+    unbacked: dict[str, list] = {}
+    counted: dict[str, tuple[int, int]] = {}
+    for kind, (step, key, on_disk) in _KINDS.items():
+        root = cache_root if kind == "extraction" else heads_root
+        disk = on_disk(root)
+        logged = _logged(rows, step, key)
+        named = {k for k in logged if k is not None}
+        missing[kind] = sorted(disk - named)
+        unbacked[kind] = sorted(named - disk)
+        counted[kind] = (len(disk), sum(logged.values()))
+    return Audit(missing=missing, unbacked=unbacked, counted=counted)
+
+
+def format_audit(result: Audit, *, limit: int = 10) -> str:
+    """The audit as lines to print."""
+    lines = []
+    for kind, (on_disk, rows) in result.counted.items():
+        lines.append(f"{kind:15s} {on_disk:5d} on disk   {rows:5d} row(s)")
+        for label, items in (
+            ("no row", result.missing[kind]),
+            ("no artefact", result.unbacked[kind]),
+        ):
+            if not items:
+                continue
+            shown = ", ".join(str(i) for i in items[:limit])
+            more = f", and {len(items) - limit} more" if len(items) > limit else ""
+            lines.append(f"    {len(items)} with {label}: {shown}{more}")
+    lines.append("every extraction and every head run has a row" if result.ok else "INCOMPLETE")
+    return "\n".join(lines)
+
+
+# --- the campaign's own numbers (N7, article claim D) ----------------------
+
+
+def _is_gpu(device: str | None) -> bool:
+    """A row's device is a GPU name ("NVIDIA ...", "cuda") or "CPU (<processor>)"."""
+    return bool(device) and not device.startswith("CPU")
+
+
+def totals(path: str | Path | None = None) -> dict[str, Any]:
+    """Wall-clock per step and the campaign's GPU-hours, from the log's own rows.
+
+    H8 §6.7 asks N7 for "total GPU-hours of the campaign and the number of runs";
+    claim D of §6.1 is that sentence. Rows with no wall-clock (the environment row)
+    are counted as rows and add no seconds.
+    """
+    steps: dict[str, dict[str, float]] = {}
+    stamps = []
+    for row in read_rows(path):
+        step = row.get("step")
+        entry = steps.setdefault(step, {"rows": 0, "wallclock_s": 0.0, "gpu_s": 0.0, "cpu_s": 0.0})
+        entry["rows"] += 1
+        if row.get("ts"):
+            stamps.append(row["ts"])
+        seconds = row.get("wallclock_s")
+        if seconds is None:
+            continue
+        entry["wallclock_s"] += float(seconds)
+        entry["gpu_s" if _is_gpu(row.get("device")) else "cpu_s"] += float(seconds)
+    gpu_s = sum(e["gpu_s"] for e in steps.values())
+    cpu_s = sum(e["cpu_s"] for e in steps.values())
+    return {
+        "steps": {k: steps[k] for k in STEPS if k in steps},
+        "gpu_hours": round(gpu_s / 3600.0, 3),
+        "cpu_hours": round(cpu_s / 3600.0, 3),
+        "wallclock_hours": round((gpu_s + cpu_s) / 3600.0, 3),
+        "first_ts": min(stamps) if stamps else None,
+        "last_ts": max(stamps) if stamps else None,
+    }
+
+
+def format_totals(result: dict[str, Any]) -> str:
+    """The totals as lines to print."""
+    lines = [f"{'step':12s} {'rows':>6s} {'wallclock_s':>13s} {'GPU s':>11s} {'CPU s':>10s}"]
+    for step, entry in result["steps"].items():
+        lines.append(
+            f"{step:12s} {entry['rows']:6d} {entry['wallclock_s']:13.1f} "
+            f"{entry['gpu_s']:11.1f} {entry['cpu_s']:10.1f}"
+        )
+    lines.append(
+        f"{result['wallclock_hours']:.2f} h of logged compute: "
+        f"{result['gpu_hours']:.2f} GPU-hours and {result['cpu_hours']:.2f} CPU-hours, "
+        f"{result['first_ts']} to {result['last_ts']}"
+    )
+    return "\n".join(lines)
+
+
 # --- CLI -------------------------------------------------------------------
 
 
@@ -299,7 +494,24 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("show", help="print the log")
 
+    chk = sub.add_parser(
+        "check", help="every extraction and every head run has a row (exit 1 if not)"
+    )
+    chk.add_argument("--cache-root", default=None, help=f"default: {CACHE_ROOT}")
+    chk.add_argument("--heads-root", default=None, help=f"default: {HEADS_ROOT}")
+
+    sub.add_parser("summary", help="wall-clock per step and the campaign's GPU-hours (N7)")
+
     args = parser.parse_args(argv)
+
+    if args.command == "check":
+        result = audit(args.path, cache_root=args.cache_root, heads_root=args.heads_root)
+        print(format_audit(result))
+        return 0 if result.ok else 1
+
+    if args.command == "summary":
+        print(format_totals(totals(args.path)))
+        return 0
 
     if args.command == "record-env":
         row = record_env(args.path, force=args.force, notes=args.notes)

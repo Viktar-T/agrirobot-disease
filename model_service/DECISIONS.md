@@ -1898,3 +1898,57 @@ and no other session working, which every row's `notes` says.
      - H8 §6.9's latency budget is "none that matters": the service sits behind the map, not
        in the robot's control loop. Nothing here was optimised, and the obvious thing to
        optimise — the per-call kNN — is left alone on purpose until something needs it.
+
+## 2026-09-21 — W6 · what W5 broke, and the compute log closed
+
+The work plan's first W6 task. **Nothing was broken.** `make test` was 350 passed and 1 skipped
+(the opt-in golden test, 12) before it and is 356 passed and 1 skipped after the six tests
+below, `make lint` is clean, `ms.registry card` answers "already what
+the artefacts render" for the registered model, and `ms.eval.verdict` and `ms.eval.write_md`
+both reproduce `verdict.md` and `n_table.md` without a byte changing. So the task was the rest
+of its sentence: the compute log.
+
+135. **Completeness is a check that code runs, not a sentence someone writes.**
+     `make compute-log-check` (`python -m ms.compute_log check`) reads the artefact roots and
+     the log and answers the W6 question in the plan's own words: every
+     `data/cache/<backbone>/<res>/<key>/<manifest>.npz`, every `data/heads/<run_id>/run.json`
+     and every `abstain.json` has a row of its step naming it. Today **20 extractions / 20
+     rows, 361 head runs / 422 rows, 361 abstention fits / 362 rows**, and nothing missing.
+     It exits 1 when something is missing, and `tests/test_compute_log.py` runs it over this
+     repository's own log, skipping itself where `data/` is not on the machine.
+     - The check does not import `ms.cache` or `ms.heads`, although they own those paths:
+       both import torch, and the log's one standing property (its module docstring and its
+       first test) is that it works on a machine that has none. The two roots are repeated in
+       `ms/compute_log.py` with a comment saying why.
+     - The abstention fit is audited too, although W6 names only extractions and head runs:
+       spec 004 FR-014 asks for its row, and the artefact sits in the same folder.
+136. **A row whose artefact is gone is a note, not a hole.** 61 `train_head` rows name run
+     folders that no longer exist: the **60 retired 50-epoch runs** of 4ada0f4 (two backbones
+     × three heads × five seeds × Makerere and Tanzania) and the **one iBean run of the W2
+     vertical slice**. The compute was spent, and the log is a ledger of compute rather than
+     an index of what survived, so `check` reports them under "no artefact" and stays green;
+     only an artefact *without* a row fails it. One run,
+     `dinov2_l14_reg-224-linear-cls-s0-7fcbe193`, carries two `fit_abstain` rows for the same
+     reason — it was fitted twice.
+137. **The campaign is 7.30 h of logged compute, 5.72 of them GPU-hours, and 98.7 % of the
+     GPU is extraction.** `make compute-log-summary` adds up the rows N7 asks to total and
+     claim D quotes, from the log itself rather than from anyone's memory of the clock:
+
+     | step | rows | wall-clock | where |
+     |---|---|---|---|
+     | `extract` | 20 | 20,314.6 s (5.64 h) | GPU |
+     | `serve` (N6) | 1 | 275.0 s | GPU |
+     | `train_head` | 422 | 1,598.8 s | CPU |
+     | `fit_abstain` | 362 | 22.7 s | CPU |
+     | `eval` | 12 | 4,066.5 s | CPU |
+
+     - Claim D's shape holds as the plan guessed it: **extraction is the whole GPU cost**
+       (1,015.7 s per cache on average, 20 of them) and **a head trains in seconds** — 3.79 s
+       per run over 422 runs, on the CPU, not even on the card. What the plan did not guess
+       is the third cost: **scoring** is 4,066.5 s, more than twice the training, because a
+       kNN bank of up to 78k rows is queried per run (105).
+     - The number is **logged** compute, not the month's: the downloads and archive
+       extraction of W1 (45 GB), every run that crashed before writing its row, and the other
+       work stream's hours are not in it. The article's sentence has to say "the campaign as
+       the harness logged it, on one RTX 5060 Laptop (8 GB)", which is the machine of the
+       log's one `env` row.
